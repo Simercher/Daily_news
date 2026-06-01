@@ -99,9 +99,11 @@ uv run python scripts/agent_bootstrap.py
 uv run python scripts/agent_generate_mcp_config.py --server imprvhub_mcp_rss_aggregator
 uv run python scripts/agent_fetch_latest.py --mode local --since-hours 24
 uv run python scripts/agent_dedup.py
+uv run python scripts/agent_classify_articles.py
+uv run python scripts/agent_fetch_fulltext.py
 ```
 
-After this, dispatch `profiles/domain-classifier` to read `data/news_items_deduped.jsonl` and write `data/news_item_labels.jsonl`.
+After this, downstream aggregation agents should read `data/news_item_fulltext.jsonl` rather than the manifest alone.
 
 The classifier output is the first layer that should contain:
 
