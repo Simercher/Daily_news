@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -11,7 +12,7 @@ from pydantic import BaseModel
 from .config import resolve_path
 
 USER_AGENT = "news_feed_bootstrap/0.1 (+https://example.local; respectful RSS collector)"
-TIMEOUT = 15
+TIMEOUT = float(os.getenv("NEWS_FEED_TIMEOUT_SECONDS", "15"))
 
 
 def utc_now() -> datetime:
@@ -24,7 +25,8 @@ def parse_datetime(value: object) -> datetime | None:
     try:
         if isinstance(value, datetime):
             return value if value.tzinfo else value.replace(tzinfo=UTC)
-        return date_parser.parse(str(value))
+        parsed = date_parser.parse(str(value))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
     except (TypeError, ValueError, OverflowError):
         return None
 

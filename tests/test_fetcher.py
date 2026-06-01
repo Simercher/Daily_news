@@ -1,10 +1,21 @@
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 
 import requests
 
+import news_feed_bootstrap.utils as utils
 from news_feed_bootstrap.feed_fetcher import fetch_feed_items
+from news_feed_bootstrap.utils import parse_datetime
+
+
+def test_timeout_can_be_configured_with_environment(monkeypatch) -> None:
+    monkeypatch.setenv("NEWS_FEED_TIMEOUT_SECONDS", "3")
+
+    reloaded = importlib.reload(utils)
+
+    assert reloaded.TIMEOUT == 3.0
 
 
 class FakeResponse:
@@ -16,6 +27,13 @@ class FakeResponse:
 
     def raise_for_status(self) -> None:
         return None
+
+
+def test_parse_datetime_assumes_utc_for_naive_strings() -> None:
+    parsed = parse_datetime("2026-06-01 10:00:00")
+
+    assert parsed is not None
+    assert parsed.tzinfo is not None
 
 
 def test_fetch_feed_items_records_published_fallback(monkeypatch, tmp_path: Path) -> None:
@@ -34,3 +52,4 @@ def test_fetch_feed_items_records_published_fallback(monkeypatch, tmp_path: Path
     assert len(items) == 1
     assert items[0].published_at is not None
     assert items[0].published_at_fallback is True
+    assert items[0].collector == "local_feedparser"

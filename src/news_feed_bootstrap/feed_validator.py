@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, timedelta
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 
 import feedparser
@@ -18,11 +18,10 @@ def _safe_parse_date(value: object) -> object | None:
     if not value:
         return None
     if hasattr(value, "tm_year"):
-        from datetime import datetime
-
         return datetime(*value[:6], tzinfo=UTC)
     try:
-        return parsedate_to_datetime(str(value))
+        parsed = parsedate_to_datetime(str(value))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
     except (TypeError, ValueError):
         return None
 

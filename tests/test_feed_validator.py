@@ -36,3 +36,22 @@ def test_validate_feed_marks_inactive_when_no_recent_items(monkeypatch) -> None:
     result = validate_feed("https://example.com/rss.xml")
     assert result.parse_ok is True
     assert result.status == "inactive"
+
+
+def test_validate_feed_handles_naive_pubdate(monkeypatch) -> None:
+    class NaiveDateResponse:
+        status_code = 200
+        text = """<?xml version="1.0"?><rss version="2.0"><channel><title>Naive</title>
+        <item><title>A</title><link>https://example.com/a</link>
+        <pubDate>01 Jun 2026 00:00:00</pubDate><description>Summary</description></item>
+        </channel></rss>"""
+        content = text.encode("utf-8")
+        headers = {"content-type": "application/rss+xml"}
+
+    monkeypatch.setattr(requests, "get", lambda *args, **kwargs: NaiveDateResponse())
+
+    result = validate_feed("https://example.com/rss.xml")
+
+    assert result.parse_ok is True
+    assert result.last_published_at is not None
+    assert result.last_published_at.tzinfo is not None
