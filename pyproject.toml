@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "news-feed-bootstrap"
 version = "0.1.0"
 description = "Agent-friendly RSS feed bootstrap, health check, OPML export, and raw news item collection pipeline."
-readme = "README_EN.md"
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "beautifulsoup4>=4.12.0",
