@@ -99,6 +99,9 @@ def _model_item_for_downstream(item: NewsItem | dict, active_by_url: dict[str, d
         "content": data.get("rss_content") or data.get("full_text"),
         "author": data.get("author"),
         "tags": topics,
+        "content_level": data.get("content_level"),
+        "language": data.get("language"),
+        "collector": data.get("collector", "local_feedparser"),
         "raw": data,
     }
 
