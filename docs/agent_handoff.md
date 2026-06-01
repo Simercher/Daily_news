@@ -4,7 +4,7 @@ This is the canonical automation-agent runbook for the Daily News RSS MVP.
 
 Use this file for all non-human execution instructions. `docs/hermes_agent_workflow.md` is only a short Hermes-specific overlay and must not duplicate this runbook.
 
-## Scope
+## What this repo is
 
 This project is an RSS feed bootstrap and raw news collection layer.
 
@@ -23,11 +23,59 @@ It does **not** summarize, rank, call LLM APIs from the Python RSS pipeline, pos
 
 Semantic domain classification and title-similarity same-event clustering are delegated to the Hermes `profiles/domain-classifier` agent after `data/news_items_deduped.jsonl` exists.
 
-## Runtime Contract
+## Documentation Contract
 
-Run commands from the repository root.
+- `README.md` and `docs/README_CN.md` are for humans.
+- `docs/agent_handoff.md` is the canonical runbook for agents.
+- `docs/hermes_agent_workflow.md` is Hermes-specific and should stay short. If it starts duplicating the runbook, merge the repeated content back into `docs/agent_handoff.md`.
+- If a file matches `docs/change_log_*.md`, it is a local-only developer log and should not be committed to GitHub.
 
-Agents should use `scripts/agent_*.py`, not the human-oriented `news-feed` CLI, because agent scripts print one final JSON object to stdout and write logs to `data/logs/`.
+When the repo adds or changes an MCP service, the agent docs must explain enough for a fresh agent to:
+
+1. understand what the MCP service is for;
+2. know whether to use it directly or through `--mode auto` / local fallback;
+3. know which config file to update, especially `/opt/data/config.yaml` or other repo settings;
+4. know whether the MCP repo should live under `external/`, stay ignored, or be referenced only through a build artifact.
+
+## First thing to check
+
+Before doing anything else, confirm the working tree and the environment are ready.
+
+### Dependencies and environment
+
+Run from the repository root:
+
+```bash
+uv sync
+uv run python scripts/agent_status.py
+```
+
+If development dependencies are missing, install them:
+
+```bash
+uv sync --dev
+```
+
+If agent validation or linting depends on extra packages, confirm they are installed before continuing. If a command fails because a dependency is missing, the agent should fix the environment first instead of guessing around it.
+
+## How to start
+
+Use the agent scripts, not the human-oriented `news-feed` CLI, because agent scripts print one final JSON object to stdout and write logs to `data/logs/`.
+
+Recommended one-shot run:
+
+```bash
+uv run python scripts/agent_run_daily.py --mode auto --since-hours 24
+```
+
+Behavior:
+
+- bootstraps automatically if `data/active_feeds.json` or `data/active_feeds.opml` is missing or older than 24 hours;
+- writes `data/logs/mcp_config_hint.json`;
+- fetches through local feedparser because real MCP fetch is not implemented yet;
+- deduplicates into `data/news_items_deduped.jsonl`.
+
+## Runtime contract
 
 Rules:
 
@@ -44,7 +92,7 @@ Exit codes:
 - `2`: configuration error
 - `3`: external service or MCP error
 
-## Pipeline
+## Pipeline order
 
 ```text
 configs/seed_sources.yaml
@@ -60,37 +108,11 @@ configs/seed_sources.yaml
 -> data/news_items_deduped.jsonl
 -> domain-classifier semantic labeling
 -> data/news_item_labels.jsonl
+-> rss_reader_mcp fulltext fetch
+-> data/news_item_fulltext.jsonl
 ```
 
-## First Steps After Clone
-
-```bash
-uv sync
-uv run python scripts/agent_status.py
-```
-
-If dependencies for development checks are missing:
-
-```bash
-uv sync --dev
-```
-
-## Recommended One-Shot Run
-
-Use this for normal automation:
-
-```bash
-uv run python scripts/agent_run_daily.py --mode auto --since-hours 24
-```
-
-Behavior:
-
-- bootstraps automatically if `data/active_feeds.json` or `data/active_feeds.opml` is missing or older than 24 hours;
-- writes `data/logs/mcp_config_hint.json`;
-- fetches through local feedparser because real MCP fetch is not implemented yet;
-- deduplicates into `data/news_items_deduped.jsonl`.
-
-## Step-by-Step Run
+## Step-by-step run
 
 Use this when the agent needs explicit checkpoints:
 
@@ -115,7 +137,7 @@ The classifier output is the first layer that should contain:
 
 The classifier must not edit `data/news_items_deduped.jsonl`; it writes labels beside it so downstream ranking/digest generation can choose one primary article per event cluster while retaining supporting sources.
 
-## Fulltext Fetch Contract
+## Fulltext fetch contract
 
 `rss_reader_mcp` is the next-stage MCP server for fulltext extraction. Its GitHub source is:
 
@@ -125,15 +147,7 @@ https://github.com/kwp-lab/rss-reader-mcp.git
 
 The repo should be placed under `external/rss-reader-mcp/` in the same style as `external/mcp-rss-aggregator/`.
 
-### Fulltext stage purpose
-
-`rss_reader_mcp` does **not** classify or summarize. It only:
-
-1. reads `data/news_item_labels.jsonl`;
-2. fetches article fulltext using the manifest's URLs and hints;
-3. writes a fulltext-enriched JSONL for later aggregation agents.
-
-### Fulltext input
+`rss_reader_mcp` does **not** classify or summarize. It only reads `data/news_item_labels.jsonl`, fetches article fulltext using the manifest's URLs and hints, and writes a fulltext-enriched JSONL for later aggregation agents.
 
 Primary input:
 
@@ -141,95 +155,30 @@ Primary input:
 data/news_item_labels.jsonl
 ```
 
-Every row should include at least:
-
-- `article_id`
-- `url`
-- `canonical_url`
-- `feed_url`
-- `title`
-- `published_at`
-- `collector`
-- `official_source`
-- `language`
-- `dedupe_key`
-- `same_event_cluster_id`
-- `same_event_cluster_rank`
-- `same_event_cluster_size`
-- `same_event_cluster_primary_id`
-- `primary_domain`
-- `secondary_domains`
-- `topics`
-- `entities`
-- `content_type`
-- `geography`
-- `confidence`
-- `needs_human_review`
-- `fetch_required`
-- `fetch_priority`
-- `fetch_hints`
-
-`fetch_hints` should be an object that can carry preferences such as:
-
-- `prefer_fulltext`
-- `prefer_primary_source`
-- `prefer_canonical_url`
-- `cluster_primary`
-- `allow_redirects`
-
-### Fulltext output
-
 Primary output:
 
 ```text
 data/news_item_fulltext.jsonl
 ```
 
-Each output row should preserve the manifest fields above and add:
+## MCP and config guidance
 
-- `fulltext`
-- `fulltext_source`
-- `fulltext_fetched_at`
-- `fulltext_status`
-- `fulltext_word_count`
-- `fulltext_language`
-- `fulltext_excerpt`
-- `fetch_attempted`
-- `fetch_error`
+When an MCP service is involved, the agent should know:
 
-Recommended `fulltext_status` values:
+- what the service is for;
+- whether to use it directly, or keep `--mode auto` / local fallback as the default;
+- which config file to inspect or update, especially `/opt/data/config.yaml`;
+- whether the MCP repo is ignored in `external/`, referenced via build artifact, or kept out of GitHub.
 
-- `success`
-- `partial`
-- `failed`
-- `blocked`
-- `skipped`
+Current Hermes-native MCP state in this environment:
 
-Recommended `fulltext_source` values:
+- `/opt/data/config.yaml` has `mcp_servers.rssAggregator`, pointing at `external/mcp-rss-aggregator/build/index.js` with `FEEDS_PATH=data/active_feeds.opml`.
+- `hermes mcp test rssAggregator` can connect and discover a `rss` tool.
+- The local ignored `external/mcp-rss-aggregator` patch fixes same-domain feed ID collisions by using host + path/query + a short URL hash for feed IDs.
+- `external/` is gitignored; do not commit or fork it in this step.
+- Daily_news Python pipeline still uses local feedparser in `--mode auto` until a stdio MCP client/normalizer is added.
 
-- `rss_reader_mcp`
-- `rss_feed_content`
-- `canonical_webpage`
-- `publisher_article`
-- `mirror`
-- `unknown`
-
-### Pipeline placement
-
-```text
-RSS fetch
--> URL exact dedup
--> domain-classifier
-   - title clustering / same-event grouping
-   - domain classification
-   - fetch hints / priority
--> data/news_item_labels.jsonl
--> rss_reader_mcp fulltext fetch
--> data/news_item_fulltext.jsonl
--> later summary / clustering / briefing agents
-```
-
-### File responsibilities
+## File responsibilities
 
 - `data/news_item_labels.jsonl`: enriched article manifest used by `rss_reader_mcp`.
 - `data/news_item_fulltext.jsonl`: fulltext-enriched article records for later summarization/aggregation agents.
@@ -237,7 +186,17 @@ RSS fetch
 - `src/news_feed_bootstrap/fulltext_fetcher.py`: orchestration layer that drives the fulltext stage.
 - `scripts/agent_fetch_fulltext.py`: manual / agent entrypoint for fulltext extraction.
 
-### Non-goals
+## Verification commands
+
+```bash
+uv run pytest -q
+uv run ruff check src scripts tests
+uv build
+```
+
+If `uv run` fails because the environment is incomplete, fix the missing dependency or interpreter setup first, then rerun the command.
+
+## Non-goals
 
 `rss_reader_mcp` does **not**:
 

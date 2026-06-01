@@ -17,3 +17,4 @@ data/*.opml
 data/logs/*
 !data/logs/.gitkeep
 external/
+docs/change_log_*.md

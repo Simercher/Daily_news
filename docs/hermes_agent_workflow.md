@@ -13,23 +13,6 @@ uv run python scripts/agent_status.py
 uv run python scripts/agent_run_daily.py --mode auto --since-hours 24
 ```
 
-Why `--mode auto`:
-
-- it generates `data/logs/mcp_config_hint.json` for future MCP handoff;
-- it falls back to local feedparser because real MCP stdio fetching is not implemented in this MVP;
-- it exits successfully when local fallback works;
-- it preserves `official_source` as a conservative cross-source verification hint in active feeds and item outputs.
-
-## Hermes Validation Run
-
-When Hermes needs to prove the full pipeline works in a bounded automation window, use a shorter RSS request timeout:
-
-```bash
-NEWS_FEED_TIMEOUT_SECONDS=3 uv run python scripts/agent_run_daily.py --mode auto --server imprvhub_mcp_rss_aggregator --since-hours 24 --force-bootstrap
-```
-
-Use the default timeout for production-like collection when runtime is less constrained.
-
 ## Hermes Decision Rules
 
 - If stdout JSON has `ok: true`, continue.
@@ -41,7 +24,3 @@ Use the default timeout for production-like collection when runtime is less cons
 - `external/` is gitignored; do not commit or fork it in this step. Preserve the MCP patch later via upstream/fork or an explicit setup patch if needed.
 - Even when `rssAggregator` is available, this MVP Python pipeline still uses local feedparser in `--mode auto` until a stdio MCP client/normalizer is added.
 - Do not edit Hermes `config.yaml` unless the user explicitly asks for MCP installation/configuration or the configured `rssAggregator` path/env is stale.
-
-## No Duplicate Runbook Content
-
-Do not add general pipeline instructions, file maps, JSON schemas, or troubleshooting tables here. Put those in `docs/agent_handoff.md` so future agents have one source of truth.
