@@ -1,41 +1,89 @@
-# Agent Handoff Guide
+# Agent Handoff Runbook
 
-This document is for an automation agent that has just cloned this repository.
+This is the canonical automation-agent runbook for the Daily News RSS MVP.
 
-If the caller is specifically Hermes, also read `docs/hermes_agent_workflow.md` after this file. That file is the Hermes-specific runbook; this file is the general project handoff.
+Use this file for all non-human execution instructions. `docs/hermes_agent_workflow.md` is only a short Hermes-specific overlay and must not duplicate this runbook.
 
-The project is an RSS feed bootstrap and raw news collection layer. It does not call LLM APIs, summarize articles, run Discord delivery, bypass paywalls, or perform event clustering. Its job is to prepare active RSS feeds and produce JSONL records for downstream models.
+## Scope
 
-## What This Project Does
+This project is an RSS feed bootstrap and raw news collection layer.
 
-Pipeline:
+It prepares:
+
+- active RSS feed metadata;
+- active feed OPML for future MCP handoff;
+- raw RSS item JSONL;
+- deduplicated downstream JSONL.
+
+It does **not** summarize, classify, rank, cluster, call LLM APIs, post to Discord, fetch paywalled content, bypass access controls, or run a real MCP stdio RSS client yet.
+
+## Runtime Contract
+
+Run commands from the repository root.
+
+Agents should use `scripts/agent_*.py`, not the human-oriented `news-feed` CLI, because agent scripts print one final JSON object to stdout and write logs to `data/logs/`.
+
+Rules:
+
+1. Parse the final stdout JSON object, not human logs.
+2. Treat `ok: true` as success.
+3. Treat `ok: false` with exit code `2` as configuration failure.
+4. Treat `ok: false` with exit code `3` as external-service/MCP failure; local fallback is usually allowed.
+5. If item counts are `0`, inspect `warnings` and network access to `raw.githubusercontent.com` / RSS hosts.
+
+Exit codes:
+
+- `0`: success
+- `1`: recoverable runtime error
+- `2`: configuration error
+- `3`: external service or MCP error
+
+## Pipeline
 
 ```text
 configs/seed_sources.yaml
--> import curated OPML/TXT feed lists
+-> import enabled curated OPML/TXT feed lists
+-> strict OPML parse, with tolerant xmlUrl/htmlUrl/title/text fallback for malformed OPML
 -> data/imported_feeds.json and data/imported_feeds.opml
 -> minimum feed health check
 -> data/active_feeds.json and data/active_feeds.opml
--> fetch latest RSS items
+-> local RSS item fetch, or auto mode MCP-hint + local fallback
 -> data/news_items_raw.jsonl
--> deduplicate and normalize output
+-> normalized exact-URL deduplication
 -> data/news_items_deduped.jsonl
 ```
 
-Use local mode first. MCP mode is prepared through config hints, but the stdio MCP client is not implemented in this MVP.
-
 ## First Steps After Clone
-
-Run from the repository root:
 
 ```bash
 uv sync
 uv run python scripts/agent_status.py
 ```
 
-All `scripts/agent_*.py` commands print one final JSON object to stdout. Do not parse human logs. Logs are written to `data/logs/`.
+If dependencies for development checks are missing:
 
-## Standard Daily Flow
+```bash
+uv sync --dev
+```
+
+## Recommended One-Shot Run
+
+Use this for normal automation:
+
+```bash
+uv run python scripts/agent_run_daily.py --mode auto --since-hours 24
+```
+
+Behavior:
+
+- bootstraps automatically if `data/active_feeds.json` or `data/active_feeds.opml` is missing or older than 24 hours;
+- writes `data/logs/mcp_config_hint.json`;
+- fetches through local feedparser because real MCP fetch is not implemented yet;
+- deduplicates into `data/news_items_deduped.jsonl`.
+
+## Step-by-Step Run
+
+Use this when the agent needs explicit checkpoints:
 
 ```bash
 uv run python scripts/agent_bootstrap.py
@@ -44,53 +92,45 @@ uv run python scripts/agent_fetch_latest.py --mode local --since-hours 24
 uv run python scripts/agent_dedup.py
 ```
 
-Equivalent one-shot local run:
+## Bootstrap and Timeout Controls
 
 ```bash
-uv run python scripts/agent_run_daily.py --mode local --since-hours 24
+uv run python scripts/agent_run_daily.py --mode auto --since-hours 24 --force-bootstrap
+uv run python scripts/agent_run_daily.py --mode auto --since-hours 24 --skip-bootstrap
+NEWS_FEED_TIMEOUT_SECONDS=3 uv run python scripts/agent_run_daily.py --mode auto --since-hours 24 --force-bootstrap
 ```
 
-`agent_run_daily.py` bootstraps automatically when `data/active_feeds.json` or `data/active_feeds.opml` is missing or older than 24 hours.
+Constraints:
 
-Hermes-specific sequencing and fallback behavior are documented in `docs/hermes_agent_workflow.md`.
+- Do not combine `--force-bootstrap` and `--skip-bootstrap`.
+- `NEWS_FEED_TIMEOUT_SECONDS` defaults to `15`.
+- Use a short timeout for validation if slow RSS hosts would otherwise exceed the automation budget.
+- Use the default or a higher timeout when completeness matters more than runtime.
 
-Useful options:
+## MCP Modes
 
-```bash
-uv run python scripts/agent_run_daily.py --mode local --since-hours 24 --force-bootstrap
-uv run python scripts/agent_run_daily.py --mode local --since-hours 24 --skip-bootstrap
-```
-
-Do not use `--force-bootstrap` and `--skip-bootstrap` together.
-
-## MCP Handoff
-
-Generate config hints:
-
-```bash
-uv run python scripts/agent_generate_mcp_config.py --server imprvhub_mcp_rss_aggregator
-```
-
-Output:
-
-```text
-data/logs/mcp_config_hint.json
-```
-
-Supported server IDs:
+Supported server IDs for config hints:
 
 - `imprvhub_mcp_rss_aggregator`
 - `buhe_mcp_rss`
 - `rss_reader_mcp`
 - `veithly_rss_mcp`
 
-Optional MCP fetch command:
+Generate only the config hint:
 
 ```bash
-uv run python scripts/agent_fetch_latest.py --mode mcp --server imprvhub_mcp_rss_aggregator --since-hours 24
+uv run python scripts/agent_generate_mcp_config.py --server imprvhub_mcp_rss_aggregator
 ```
 
-Expected MVP behavior: the script writes `data/logs/mcp_config_hint.json`, returns JSON with `ok: false`, and exits with code `3`. The JSON warning tells the caller that local mode is available as fallback.
+Expected mode behavior:
+
+| Mode | Command shape | Expected MVP behavior |
+| --- | --- | --- |
+| `local` | `agent_fetch_latest.py --mode local --since-hours 24` | Fetches with local feedparser. |
+| `auto` | `agent_fetch_latest.py --mode auto --server imprvhub_mcp_rss_aggregator --since-hours 24` | Writes MCP hint, warns, falls back to local feedparser, exits `0`. |
+| `mcp` | `agent_fetch_latest.py --mode mcp --server imprvhub_mcp_rss_aggregator --since-hours 24` | Writes MCP hint, returns `ok: false`, exits `3`. |
+
+Do not treat `--mode mcp` exit code `3` as an unexpected regression in this MVP. It is the documented behavior until a real MCP stdio client is implemented.
 
 ## JSON Contract
 
@@ -124,55 +164,64 @@ Failure shape:
 }
 ```
 
-Exit codes:
-
-- `0`: success
-- `1`: recoverable error
-- `2`: configuration error
-- `3`: external service or MCP error
-
 ## Important Files
 
-- `configs/seed_sources.yaml`: curated OPML/TXT sources.
-- `data/imported_feeds.json`: imported feed candidates.
-- `data/feed_health.jsonl`: feed health check results.
-- `data/active_feeds.json`: active feed metadata.
-- `data/active_feeds.opml`: OPML handoff file for RSS MCP servers.
-- `data/news_items_raw.jsonl`: raw RSS item output.
-- `data/news_items_deduped.jsonl`: downstream model input.
-- `data/logs/*.log`: script logs.
-- `data/logs/mcp_config_hint.json`: generated MCP config hint.
+| Path | Purpose |
+| --- | --- |
+| `configs/seed_sources.yaml` | Curated OPML/TXT seed sources; `enabled: false` keeps candidates without importing them. |
+| `data/imported_feeds.json` | Imported feed candidates. |
+| `data/imported_feeds.opml` | Imported feed candidates as OPML. |
+| `data/feed_health.jsonl` | Feed health check results. |
+| `data/active_feeds.json` | Active feed metadata. |
+| `data/active_feeds.opml` | OPML handoff file for RSS MCP servers. |
+| `data/inactive_feeds.json` | Inactive or failed feed candidates plus health information. |
+| `data/news_items_raw.jsonl` | Raw RSS item output. |
+| `data/news_items_deduped.jsonl` | Main downstream model/agent input. |
+| `data/logs/*.log` | Script logs. |
+| `data/logs/mcp_config_hint.json` | Generated MCP config hint. |
 
-## Downstream Model Input
-
-Read:
+Downstream agents should usually read:
 
 ```text
 data/news_items_deduped.jsonl
 ```
 
-Each row is shaped for downstream classification, cross-source deduplication, importance ranking, summarization, and Discord formatting. Do not expect this project to perform those semantic tasks.
+Rows include `collector`, currently `local_feedparser`. Future MCP integration should write `collector: "mcp:<server_id>"`.
 
-## Human CLI
+## Source Configuration
 
-Humans may use:
+Currently enabled families:
+
+- `feedsForJournalists` OPML
+- `plenaryapp/awesome-rss-feeds` United States / United Kingdom
+- `awesome-tech-rss`
+
+Currently disabled candidates:
+
+- `feedsForJournalists` text list
+- `SecurityRSS`
+- `awesome_ML_AI_RSS_feed`
+- `awesome-newsCN-feeds`
+
+Only enable disabled candidates after checking source quality and whether the downstream briefing needs that topic.
+
+## Validation Commands
 
 ```bash
-uv run news-feed --help
-uv run news-feed bootstrap
-uv run news-feed fetch --mode local --since-hours 24
-uv run news-feed dedup
-uv run news-feed run-all --mode local --since-hours 24
+uv run pytest -q
+uv run ruff check src scripts tests
+uv build
 ```
 
-Agents should prefer `scripts/agent_*.py` because stdout is JSON-only.
+For an end-to-end validation run:
+
+```bash
+NEWS_FEED_TIMEOUT_SECONDS=3 uv run python scripts/agent_run_daily.py --mode auto --server imprvhub_mcp_rss_aggregator --since-hours 24 --force-bootstrap
+```
 
 ## Troubleshooting
 
-If `imported_feeds`, `active_feeds`, and item counts are `0`, check whether the runtime can reach `raw.githubusercontent.com` and RSS feed hosts. The scripts still return machine-readable JSON and may include warnings.
-
-If MCP mode fails, use local mode:
-
-```bash
-uv run python scripts/agent_fetch_latest.py --mode local --since-hours 24
-```
+- `imported_feeds`, `active_feeds`, or item counts are `0`: check network access to GitHub raw URLs and RSS hosts.
+- Forced bootstrap takes too long: use `NEWS_FEED_TIMEOUT_SECONDS=3` for validation.
+- `--mode mcp` exits `3`: expected MVP behavior; use `--mode auto` or `--mode local`.
+- JSON says `ok: false`: inspect `error.type`, `error.detail`, and `warnings` before retrying.

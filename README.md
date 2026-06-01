@@ -1,18 +1,50 @@
 # news_feed_bootstrap
 
-`news_feed_bootstrap` is a small automation project for turning curated RSS/OPML lists into clean feed and news-item files.
+`news_feed_bootstrap` is the MVP RSS collection layer for Daily News. It turns curated RSS/OPML seed lists into active feed files and recent news-item JSONL for downstream agents or models.
 
-It is designed as the collection layer before a downstream model pipeline. This project gathers RSS feeds, checks whether they are usable, fetches recent RSS items, and writes JSON/JSONL outputs. It does not summarize, classify, rank, cluster, call LLM APIs, run Discord delivery, use Playwright, or bypass paywalls and access controls.
+This repository is intentionally **not** the final briefing bot. It prepares the raw material for later summarization, ranking, clustering, and Discord delivery.
 
-## How To Think About It
+## Current MVP Capabilities
+
+The current pipeline can:
+
+1. Import curated RSS/OPML seed lists from `configs/seed_sources.yaml`.
+2. Keep future candidate sources in config with `enabled: false`.
+3. Parse normal OPML and tolerate some malformed OPML, including unescaped ampersands, by falling back to outline-attribute extraction.
+4. Run minimum RSS feed health checks.
+5. Export active feeds as both JSON and OPML.
+6. Fetch recent RSS items through local `feedparser`.
+7. Deduplicate items by normalized exact URL.
+8. Preserve a `collector` field so downstream stages can tell whether an item came from local feedparser or, later, an MCP collector.
+9. Generate an RSS MCP config hint file for future/optional MCP handoff.
+10. Run as agent-friendly scripts whose stdout is one final JSON object.
+
+## Not Implemented Yet
+
+This MVP does **not** currently:
+
+- fetch through a real MCP stdio client;
+- summarize articles with an LLM;
+- classify items into final Daily News categories;
+- rank importance or score credibility;
+- cluster multiple sources into the same event;
+- fetch full article text beyond RSS-provided content;
+- bypass paywalls, CAPTCHAs, or access controls;
+- post to Discord.
+
+## Pipeline Shape
 
 ```text
-curated RSS/OPML lists
--> imported feed candidates
--> minimum health check
--> active feeds JSON/OPML
--> raw RSS item fetch
--> deduped JSONL for downstream models
+configs/seed_sources.yaml
+-> import enabled curated OPML/TXT feed lists
+-> tolerant OPML parsing when strict XML fails
+-> data/imported_feeds.json and data/imported_feeds.opml
+-> minimum feed health check
+-> data/active_feeds.json and data/active_feeds.opml
+-> local RSS item fetch, or auto mode MCP-hint + local fallback
+-> data/news_items_raw.jsonl
+-> normalized exact-URL deduplication
+-> data/news_items_deduped.jsonl
 ```
 
 Primary outputs:
@@ -21,6 +53,13 @@ Primary outputs:
 - `data/active_feeds.opml`
 - `data/news_items_raw.jsonl`
 - `data/news_items_deduped.jsonl`
+- `data/logs/mcp_config_hint.json`
+
+Downstream systems should usually read:
+
+```text
+data/news_items_deduped.jsonl
+```
 
 ## Install
 
@@ -36,9 +75,27 @@ For development tools and tests:
 uv sync --dev
 ```
 
+## Quick Run
+
+One-shot MVP run:
+
+```bash
+uv run python scripts/agent_run_daily.py --mode auto --since-hours 24
+```
+
+`--mode auto` currently generates the MCP config hint, then uses local feedparser fallback because real MCP fetching is not implemented in this MVP.
+
+Force a fresh bootstrap and keep validation runs short:
+
+```bash
+NEWS_FEED_TIMEOUT_SECONDS=3 uv run python scripts/agent_run_daily.py --mode auto --since-hours 24 --force-bootstrap
+```
+
+`NEWS_FEED_TIMEOUT_SECONDS` defaults to `15`. Use a shorter value for validation when slow RSS hosts would otherwise delay the run. Use the default or a higher value when completeness matters more than runtime.
+
 ## Human CLI
 
-Human operators can use the `news-feed` CLI:
+Human operators can also use the `news-feed` CLI:
 
 ```bash
 uv run news-feed --help
@@ -48,19 +105,21 @@ uv run news-feed dedup
 uv run news-feed run-all --mode local --since-hours 24
 ```
 
-`run-all` performs bootstrap, local fetch, and deduplication in one command.
+Agents should prefer `scripts/agent_*.py` because script stdout is machine-readable JSON.
 
-## Agent Entry Points
+## Agent Documentation
 
-Automation agents should use the scripts in `scripts/`. Their stdout is JSON-only, and logs are written to `data/logs/`.
+The canonical agent runbook is:
 
-```bash
-uv run python scripts/agent_status.py
-uv run python scripts/agent_bootstrap.py
-uv run python scripts/agent_run_daily.py --mode local --since-hours 24
+```text
+docs/agent_handoff.md
 ```
 
-For a full agent handoff guide, see `docs/agent_handoff.md`.
+Hermes-specific notes are intentionally kept short and non-duplicative in:
+
+```text
+docs/hermes_agent_workflow.md
+```
 
 ## Seed Sources
 
@@ -70,21 +129,27 @@ Feed sources are configured in:
 configs/seed_sources.yaml
 ```
 
-Seed URLs should be direct OPML or text files when possible. GitHub pages and web directories are kept as notes until their raw paths are confirmed.
+Currently enabled source families:
 
-Included seed families:
-
-- `feedsForJournalists`
-- `plenaryapp/awesome-rss-feeds`
+- `feedsForJournalists` OPML
+- `plenaryapp/awesome-rss-feeds` United States / United Kingdom
 - `awesome-tech-rss`
-- `SecurityRSS` as a manual-confirmation source
+
+Currently retained but disabled candidates:
+
+- `feedsForJournalists` text list, mostly overlapping fallback
+- `SecurityRSS`, for a future cybersecurity section
+- `awesome_ML_AI_RSS_feed`, for future AI/ML specialist runs
+- `awesome-newsCN-feeds`, because Chinese third-party/generated feeds need extra review
+
+Sources with `enabled: false` stay documented in config but are skipped by bootstrap.
 
 ## MCP Handoff
 
-This MVP prepares bridge files for external RSS MCP servers:
+Generate an MCP config hint:
 
 ```bash
-uv run news-feed mcp-config --server imprvhub_mcp_rss_aggregator
+uv run python scripts/agent_generate_mcp_config.py --server imprvhub_mcp_rss_aggregator
 ```
 
 The generated hint is written to:
@@ -93,13 +158,18 @@ The generated hint is written to:
 data/logs/mcp_config_hint.json
 ```
 
-MCP fetch is adapter-only in this MVP. Local mode is the default working path.
+Expected MVP behavior:
+
+- `--mode auto`: writes the MCP hint and falls back to local feedparser.
+- `--mode local`: uses local feedparser only.
+- `--mode mcp`: writes the MCP hint, returns `ok: false`, and exits with code `3` because real MCP fetching is not implemented yet.
 
 ## Tests
 
 ```bash
-uv run pytest
+uv run pytest -q
 uv run ruff check src scripts tests
+uv build
 ```
 
 ## Legacy

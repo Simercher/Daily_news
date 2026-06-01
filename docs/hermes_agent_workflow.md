@@ -1,83 +1,42 @@
-# Hermes Agent Runbook
+# Hermes Agent Workflow Overlay
 
-This file is the Hermes-specific execution runbook. For the general project overview, file map, JSON contract, and troubleshooting notes, read `docs/agent_handoff.md` first.
+This file is intentionally short. The canonical agent runbook is `docs/agent_handoff.md`.
 
-Hermes should use `scripts/agent_*.py`, not the human-oriented `news-feed` CLI. Agent script stdout is JSON-only. Logs are written to `data/logs/`.
+Hermes agents should read `docs/agent_handoff.md` first and use this file only for Hermes-specific routing choices.
 
-## Default Local Run
+## Hermes Defaults
 
-Run from the repository root:
+Use the agent scripts, not the human CLI:
 
 ```bash
-uv sync
 uv run python scripts/agent_status.py
-uv run python scripts/agent_run_daily.py --mode local --since-hours 24
+uv run python scripts/agent_run_daily.py --mode auto --since-hours 24
 ```
 
-`agent_run_daily.py` is the preferred Hermes entrypoint for normal operation. It will bootstrap automatically when `data/active_feeds.json` or `data/active_feeds.opml` is missing or older than 24 hours.
+Why `--mode auto`:
 
-## Step-By-Step Run
+- it generates `data/logs/mcp_config_hint.json` for future MCP handoff;
+- it falls back to local feedparser because real MCP stdio fetching is not implemented in this MVP;
+- it exits successfully when local fallback works.
 
-Use this when Hermes wants explicit checkpoints between stages:
+## Hermes Validation Run
+
+When Hermes needs to prove the full pipeline works in a bounded automation window, use a shorter RSS request timeout:
 
 ```bash
-uv run python scripts/agent_bootstrap.py
-uv run python scripts/agent_generate_mcp_config.py --server imprvhub_mcp_rss_aggregator
-uv run python scripts/agent_fetch_latest.py --mode local --since-hours 24
-uv run python scripts/agent_dedup.py
+NEWS_FEED_TIMEOUT_SECONDS=3 uv run python scripts/agent_run_daily.py --mode auto --server imprvhub_mcp_rss_aggregator --since-hours 24 --force-bootstrap
 ```
 
-Final downstream input:
+Use the default timeout for production-like collection when runtime is less constrained.
 
-```text
-data/news_items_deduped.jsonl
-```
+## Hermes Decision Rules
 
-## Bootstrap Controls
+- If stdout JSON has `ok: true`, continue.
+- If `ok: false` with exit code `2`, report a configuration problem.
+- If `ok: false` with exit code `3`, treat it as an MCP/external-service limitation and fallback to `--mode auto` or `--mode local`.
+- Do not ask the user to approve MCP setup unless the task explicitly requires real MCP integration; this MVP only writes a config hint.
+- Do not edit Hermes `config.yaml` unless the user explicitly asks for MCP installation/configuration.
 
-```bash
-uv run python scripts/agent_run_daily.py --mode local --since-hours 24 --force-bootstrap
-uv run python scripts/agent_run_daily.py --mode local --since-hours 24 --skip-bootstrap
-```
+## No Duplicate Runbook Content
 
-Do not combine `--force-bootstrap` and `--skip-bootstrap`.
-
-## MCP Handoff
-
-MCP mode is not a full stdio client in this MVP. Hermes can still generate config hints:
-
-```bash
-uv run python scripts/agent_generate_mcp_config.py --server imprvhub_mcp_rss_aggregator
-```
-
-Output:
-
-```text
-data/logs/mcp_config_hint.json
-```
-
-If Hermes tries MCP fetch:
-
-```bash
-uv run python scripts/agent_fetch_latest.py --mode mcp --server imprvhub_mcp_rss_aggregator --since-hours 24
-```
-
-Expected MVP behavior:
-
-- stdout JSON has `ok: false`
-- exit code is `3`
-- `data/logs/mcp_config_hint.json` is written
-- warning says local mode is available as fallback
-
-Fallback command:
-
-```bash
-uv run python scripts/agent_fetch_latest.py --mode local --since-hours 24
-```
-
-## Decision Rules
-
-- If stdout JSON has `ok: true`, Hermes may continue to the next step.
-- If `ok: false` and exit code is `2`, treat it as a configuration issue.
-- If `ok: false` and exit code is `3`, treat it as MCP or external-service failure and fallback to local mode when appropriate.
-- If counts are `0`, inspect JSON `warnings`; common cause is missing network access to `raw.githubusercontent.com` or RSS feed hosts.
+Do not add general pipeline instructions, file maps, JSON schemas, or troubleshooting tables here. Put those in `docs/agent_handoff.md` so future agents have one source of truth.

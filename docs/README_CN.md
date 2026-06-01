@@ -1,18 +1,50 @@
 # news_feed_bootstrap
 
-`news_feed_bootstrap` 是一個小型自動化專案，用來把整理好的 RSS / OPML 清單轉成乾淨的 feed 與新聞資料檔。
+`news_feed_bootstrap` 是 Daily News 的 MVP RSS 收集層。它會把 curated RSS / OPML seed 清單轉成可用的 active feed 檔案，並抓取近期新聞 RSS items，輸出 JSONL 給後續 agent 或模型使用。
 
-它定位在後續模型流程之前的資料收集層。這個專案負責匯入 RSS feeds、檢查 feed 是否可用、抓取近期 RSS items，並輸出 JSON / JSONL。它不做摘要、不做分類、不做重要性排序、不做事件聚類、不呼叫 LLM API、不做 Discord 發送、不使用 Playwright，也不繞過 paywall 或存取限制。
+這個 repo 目前**不是完整每日新聞簡報 bot**。它負責準備後續摘要、排序、事件聚類與 Discord 發送所需的原始資料。
 
-## 如何理解這個專案
+## 目前 MVP 可以做什麼
+
+目前 pipeline 可以：
+
+1. 從 `configs/seed_sources.yaml` 匯入 curated RSS / OPML seed lists。
+2. 用 `enabled: false` 在 config 裡保留未來候選 source。
+3. 解析正常 OPML；如果 OPML 有未 escape 的 `&` 等 XML 問題，會 fallback 用 tolerant outline attribute extraction。
+4. 做最低限度 RSS feed health check。
+5. 匯出 active feeds 的 JSON 與 OPML。
+6. 使用 local `feedparser` 抓取近期 RSS items。
+7. 用 normalized exact URL 做 deduplication。
+8. 保留 `collector` 欄位，讓下游知道 item 來自 local feedparser，或未來的 MCP collector。
+9. 產生 RSS MCP config hint file，供未來或外部 MCP handoff 使用。
+10. 提供 agent-friendly scripts，stdout 最後會輸出一個 JSON object。
+
+## 目前還不能做什麼
+
+這個 MVP 目前**不會**：
+
+- 透過真正的 MCP stdio client 抓 RSS；
+- 用 LLM 摘要文章；
+- 分類成最終每日新聞類別；
+- 做重要性排序或可信度評分；
+- 把多來源同一事件聚類；
+- 抓取 RSS 以外的全文；
+- 繞過 paywall、CAPTCHA 或存取限制；
+- 發送到 Discord。
+
+## Pipeline 形狀
 
 ```text
-curated RSS/OPML lists
--> imported feed candidates
--> minimum health check
--> active feeds JSON/OPML
--> raw RSS item fetch
--> deduped JSONL for downstream models
+configs/seed_sources.yaml
+-> 匯入 enabled curated OPML/TXT feed lists
+-> strict XML 失敗時使用 tolerant OPML parsing
+-> data/imported_feeds.json and data/imported_feeds.opml
+-> minimum feed health check
+-> data/active_feeds.json and data/active_feeds.opml
+-> local RSS item fetch，或 auto mode MCP-hint + local fallback
+-> data/news_items_raw.jsonl
+-> normalized exact-URL deduplication
+-> data/news_items_deduped.jsonl
 ```
 
 主要輸出：
@@ -21,6 +53,13 @@ curated RSS/OPML lists
 - `data/active_feeds.opml`
 - `data/news_items_raw.jsonl`
 - `data/news_items_deduped.jsonl`
+- `data/logs/mcp_config_hint.json`
+
+下游系統通常應該讀：
+
+```text
+data/news_items_deduped.jsonl
+```
 
 ## 安裝
 
@@ -36,9 +75,27 @@ uv sync
 uv sync --dev
 ```
 
+## 快速執行
+
+MVP one-shot run：
+
+```bash
+uv run python scripts/agent_run_daily.py --mode auto --since-hours 24
+```
+
+`--mode auto` 目前會產生 MCP config hint，然後因為這個 MVP 尚未實作真正 MCP fetch，所以 fallback 到 local feedparser。
+
+強制重新 bootstrap，並讓驗證 run 不被慢 RSS host 拖太久：
+
+```bash
+NEWS_FEED_TIMEOUT_SECONDS=3 uv run python scripts/agent_run_daily.py --mode auto --since-hours 24 --force-bootstrap
+```
+
+`NEWS_FEED_TIMEOUT_SECONDS` 預設是 `15`。端到端驗證時可以設短一點；如果正式收集比較重視完整性，就用預設值或設更高秒數。
+
 ## 人類使用的 CLI
 
-人類操作者可以使用 `news-feed` CLI：
+人類操作者也可以使用 `news-feed` CLI：
 
 ```bash
 uv run news-feed --help
@@ -48,19 +105,21 @@ uv run news-feed dedup
 uv run news-feed run-all --mode local --since-hours 24
 ```
 
-`run-all` 會一次執行 bootstrap、local fetch 與 deduplication。
+Agent 應優先使用 `scripts/agent_*.py`，因為 script stdout 是 machine-readable JSON。
 
-## Agent 入口
+## Agent 文件
 
-自動化 agent 應使用 `scripts/` 裡的 scripts。這些 scripts 的 stdout 只會輸出 JSON，logs 會寫到 `data/logs/`。
+Agent 的 canonical runbook 是：
 
-```bash
-uv run python scripts/agent_status.py
-uv run python scripts/agent_bootstrap.py
-uv run python scripts/agent_run_daily.py --mode local --since-hours 24
+```text
+docs/agent_handoff.md
 ```
 
-完整 agent 交接說明請看 `docs/agent_handoff.md`。
+Hermes 專用補充刻意保持簡短，避免重複維護，放在：
+
+```text
+docs/hermes_agent_workflow.md
+```
 
 ## Seed Sources
 
@@ -70,36 +129,47 @@ Feed 來源設定在：
 configs/seed_sources.yaml
 ```
 
-Seed URL 盡量使用直接的 OPML 或文字檔。GitHub pages 與 web directories 會先保留為註記，等 raw path 確認後再啟用。
+目前啟用的 source families：
 
-目前包含的 seed families：
-
-- `feedsForJournalists`
-- `plenaryapp/awesome-rss-feeds`
+- `feedsForJournalists` OPML
+- `plenaryapp/awesome-rss-feeds` United States / United Kingdom
 - `awesome-tech-rss`
-- `SecurityRSS`，目前列為需手動確認的來源
+
+目前保留但 disabled 的候選來源：
+
+- `feedsForJournalists` text list，主要作為重疊 fallback
+- `SecurityRSS`，未來資安專區可用
+- `awesome_ML_AI_RSS_feed`，未來 AI / ML specialist run 可用
+- `awesome-newsCN-feeds`，中文第三方或 generated feeds 需要額外檢查
+
+`enabled: false` 的來源會保留在設定檔中，但不會被 bootstrap 匯入。
 
 ## MCP Handoff
 
-這個 MVP 會替外部 RSS MCP servers 準備橋接檔：
+產生 MCP config hint：
 
 ```bash
-uv run news-feed mcp-config --server imprvhub_mcp_rss_aggregator
+uv run python scripts/agent_generate_mcp_config.py --server imprvhub_mcp_rss_aggregator
 ```
 
-產生的設定提示會寫到：
+產生的 hint 會寫到：
 
 ```text
 data/logs/mcp_config_hint.json
 ```
 
-MCP fetch 在這個 MVP 中只做到 adapter / handoff 階段。預設可運作路徑是 local mode。
+MVP 的 expected behavior：
+
+- `--mode auto`：寫入 MCP hint，然後 fallback 到 local feedparser。
+- `--mode local`：只使用 local feedparser。
+- `--mode mcp`：寫入 MCP hint，回傳 `ok: false`，並用 exit code `3` 結束，因為真正 MCP fetch 尚未實作。
 
 ## 測試
 
 ```bash
-uv run pytest
+uv run pytest -q
 uv run ruff check src scripts tests
+uv build
 ```
 
 ## Legacy
