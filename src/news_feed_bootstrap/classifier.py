@@ -319,6 +319,12 @@ def classify_item(item: dict) -> ClassificationResult:
         "collector": item.get("collector"),
         "official_source": bool(item.get("official_source", False)),
         "language": item.get("language"),
+        "trust_tier": item.get("trust_tier"),
+        "source_tier": item.get("source_tier"),
+        "source_role": item.get("source_role"),
+        "source_format": item.get("source_format"),
+        "source_id": item.get("source_id"),
+        "source_name": item.get("source_name"),
         "dedupe_key": item.get("dedupe_key"),
         "same_event_cluster_id": same_event_cluster_id,
         "same_event_cluster_rank": same_event_cluster_rank,
@@ -348,6 +354,17 @@ def classify_articles(items: Iterable[dict]) -> list[dict]:
     return [classify_item(item).row for item in items]
 
 
+def _merge_manifest_row(item: dict, label: dict) -> dict:
+    merged = dict(item)
+    merged.update(label)
+    for key in ("id", "article_id", "title", "url", "canonical_url", "feed_url", "feed_title", "published_at", "fetched_at", "collector", "official_source", "language", "trust_tier", "source_tier", "source_role", "source_format", "source_id", "source_name", "dedupe_key"):
+        if key in item and merged.get(key) is None:
+            merged[key] = item.get(key)
+    if not merged.get("canonical_url") and merged.get("url"):
+        merged["canonical_url"] = merged["url"]
+    return merged
+
+
 def run_article_classifier(
     input_path: str = "data/news_items_deduped.jsonl",
     output_path: str = "data/news_item_labels.jsonl",
@@ -356,6 +373,6 @@ def run_article_classifier(
     items = read_jsonl(input_path)
     clustered_items = cluster_title_similar_items(items, threshold=cluster_threshold)
     labels = classify_articles(clustered_items)
-    merged = [dict(item, **label) for item, label in zip(clustered_items, labels)]
+    merged = [_merge_manifest_row(item, label) for item, label in zip(clustered_items, labels)]
     write_jsonl(output_path, merged)
     return merged
