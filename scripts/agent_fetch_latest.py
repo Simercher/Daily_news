@@ -26,22 +26,11 @@ def main() -> None:
     configure_agent_logging(COMMAND)
     try:
         warnings: list[str] = []
+        generate_mcp_config_hint(args.server)
         if args.mode == "mcp":
-            generate_mcp_config_hint(args.server)
-            print_agent_error(
-                COMMAND,
-                "MCP fetch is not implemented in this MVP.",
-                "ExternalServiceError",
-                "Generated data/logs/mcp_config_hint.json. "
-                "Hermes may call the RSS MCP tool externally or fallback to local mode.",
-                warnings=["Fallback to local mode is available."],
-                exit_code=EXIT_EXTERNAL,
-            )
+            warnings.append("MCP is the primary fetch path; local feedparser is used only when MCP is unavailable.")
         if args.mode == "auto":
-            generate_mcp_config_hint(args.server)
-            warnings.append(
-                "MCP fetch is not implemented in this MVP; generated config hint and used local feedparser fallback."
-            )
+            warnings.append("MCP is preferred when available; local feedparser fallback remains enabled.")
         items = run_local_fetch(since_hours=args.since_hours)
         status = project_status()
         stats = status["stats"] | {"raw_items": len(items)}

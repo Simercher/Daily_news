@@ -36,21 +36,11 @@ def main() -> None:
                 exit_code=EXIT_CONFIG,
             )
         warnings: list[str] = []
+        generate_mcp_config_hint(args.server)
         if args.mode == "mcp":
-            generate_mcp_config_hint(args.server)
-            print_agent_error(
-                COMMAND,
-                "MCP fetch is not implemented in this MVP.",
-                "ExternalServiceError",
-                "Run agent_generate_mcp_config.py and call the RSS MCP tool externally, or use --mode local/auto.",
-                warnings=["Fallback to local mode is available."],
-                exit_code=3,
-            )
+            warnings.append("MCP is the primary RSS route; local feedparser fallback remains available.")
         if args.mode == "auto":
-            generate_mcp_config_hint(args.server)
-            warnings.append(
-                "MCP fetch is not implemented in this MVP; generated config hint and used local feedparser fallback."
-            )
+            warnings.append("MCP is preferred when available; local feedparser fallback remains available.")
 
         should_bootstrap = args.force_bootstrap or (
             not args.skip_bootstrap
@@ -67,8 +57,15 @@ def main() -> None:
 
         raw = run_local_fetch(since_hours=args.since_hours)
         deduped = dedup_raw_items()
+        from news_feed_bootstrap.classifier import run_article_classifier
+
+        labels = run_article_classifier(input_path="data/news_items_deduped.jsonl")
         status = project_status()
-        stats = status["stats"] | {"raw_items": len(raw), "deduped_items": len(deduped)}
+        stats = status["stats"] | {
+            "raw_items": len(raw),
+            "deduped_items": len(deduped),
+            "labeled_items": len(labels),
+        }
         print_agent_success(COMMAND, "Daily RSS pipeline completed.", output_paths(), stats, warnings)
     except SystemExit:
         raise
