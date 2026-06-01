@@ -164,6 +164,12 @@ Expected MVP behavior:
 - `--mode local`: uses local feedparser only.
 - `--mode mcp`: writes the MCP hint, returns `ok: false`, and exits with code `3` because real MCP fetching is not implemented yet.
 
+Hermes native MCP status for this environment:
+
+- `/opt/data/config.yaml` has `mcp_servers.rssAggregator` pointing at `external/mcp-rss-aggregator/build/index.js` with `FEEDS_PATH=data/active_feeds.opml`.
+- `hermes mcp test rssAggregator` connects and discovers one `rss` tool.
+- The Daily_news Python pipeline still does not call that MCP tool directly; until a stdio MCP client/normalizer is added, pipeline `--mode auto` intentionally keeps using local feedparser and records `collector: "local_feedparser"`.
+
 ## Tests
 
 ```bash

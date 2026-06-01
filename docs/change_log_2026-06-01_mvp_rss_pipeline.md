@@ -199,6 +199,66 @@ MCP_HINT_KEYS ['capabilities', 'mcp_config', 'recommended', 'repo', 'server_id']
 - 成果：給人看的 README 與給 agent 的 runbook 分工明確；agent 文件只剩一個 source of truth，Hermes 檔案只補 Hermes-specific routing。
 - 驗證：`git diff --check`、`uv run pytest -q`、`uv run ruff check src scripts tests`。
 
+### 2026-06-01 Hermes MCP config and final validation pass
+
+- 原本：MVP 只產生 `data/logs/mcp_config_hint.json`，文件也只把 MCP 視為 future handoff；`imprvhub/mcp-rss-aggregator` 尚未在 Hermes native MCP config 中完成實測。
+- 修改：將 `imprvhub/mcp-rss-aggregator` clone/build 到 ignored `external/mcp-rss-aggregator/`，修正 external repo 的 MCP SDK capabilities typing、`FEEDS_PATH` env 讀取、sample OPML 檔名，並讓 `/opt/data/config.yaml` 的 `mcp_servers.rssAggregator` 指向 build artifact 與 `data/active_feeds.opml`。
+- 成果：`hermes mcp test rssAggregator` 可連線並 discovery 到一個 `rss` tool；Daily_news Python pipeline 仍維持 MVP 行為，不直接呼叫 MCP tool，`--mode auto` 會產生 hint 後使用 local feedparser fallback。
+- 驗證：
+
+```text
+$ hermes mcp test rssAggregator
+Testing 'rssAggregator'...
+  Transport: stdio → node
+  Auth: none
+  ✓ Connected (540ms)
+  ✓ Tools discovered: 1
+
+    rss  Interfaz principal para Hacker News con comandos simpli...
+
+$ env -u VIRTUAL_ENV uv run pytest -q
+15 passed in 0.29s
+
+$ env -u VIRTUAL_ENV uv run ruff check src scripts tests
+All checks passed!
+
+$ git -c safe.directory=/opt/data/plugins/Daily_news diff --check
+# no output
+
+$ env -u VIRTUAL_ENV uv build
+Successfully built dist/news_feed_bootstrap-0.1.0.tar.gz
+Successfully built dist/news_feed_bootstrap-0.1.0-py3-none-any.whl
+
+$ env -u VIRTUAL_ENV NEWS_FEED_TIMEOUT_SECONDS=3 uv run python scripts/agent_run_daily.py --mode auto --server imprvhub_mcp_rss_aggregator --since-hours 24 --force-bootstrap
+{
+  "ok": true,
+  "command": "agent_run_daily",
+  "message": "Daily RSS pipeline completed.",
+  "stats": {
+    "imported_feeds": 282,
+    "active_feeds": 153,
+    "inactive_feeds": 129,
+    "raw_items": 851,
+    "deduped_items": 749
+  },
+  "warnings": [
+    "MCP fetch is not implemented in this MVP; generated config hint and used local feedparser fallback."
+  ]
+}
+```
+
+Artifact inspection after this run:
+
+```text
+data/imported_feeds.json: feeds=282 size=144726
+data/active_feeds.json: feeds=153 size=82045
+data/inactive_feeds.json: feeds=129 size=146521
+data/feed_health.jsonl: lines=282 size=135884
+data/news_items_raw.jsonl: lines=851 size=1552647 collectors=['local_feedparser']
+data/news_items_deduped.jsonl: lines=749 size=2848691 collectors=['local_feedparser']
+data/logs/mcp_config_hint.json: keys=['capabilities', 'mcp_config', 'recommended', 'repo', 'server_id'] size=579
+```
+
 ## 後續工作
 
 - 真正接上 RSS MCP stdio/client 後，讓 `collector` 使用 `mcp:<server_id>`，並新增 MCP output normalization tests。

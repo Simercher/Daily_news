@@ -16,3 +16,4 @@ data/*.opml
 !data/.gitkeep
 data/logs/*
 !data/logs/.gitkeep
+external/

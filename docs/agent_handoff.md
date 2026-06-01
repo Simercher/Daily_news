@@ -132,6 +132,12 @@ Expected mode behavior:
 
 Do not treat `--mode mcp` exit code `3` as an unexpected regression in this MVP. It is the documented behavior until a real MCP stdio client is implemented.
 
+Hermes native MCP status in the current deployment:
+
+- `/opt/data/config.yaml` contains `mcp_servers.rssAggregator` with command `node`, args `/opt/data/plugins/Daily_news/external/mcp-rss-aggregator/build/index.js`, and env `FEEDS_PATH=/opt/data/plugins/Daily_news/data/active_feeds.opml`.
+- `hermes mcp test rssAggregator` should connect and discover one `rss` tool.
+- This validates that the MCP server can run under Hermes, but the Daily_news Python pipeline still does not call the MCP tool directly. Until a stdio MCP client and output normalizer are implemented, `--mode auto` remains the correct automation default and should produce `collector: "local_feedparser"`.
+
 ## JSON Contract
 
 Success shape:

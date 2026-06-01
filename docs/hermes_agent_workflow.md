@@ -34,8 +34,9 @@ Use the default timeout for production-like collection when runtime is less cons
 - If stdout JSON has `ok: true`, continue.
 - If `ok: false` with exit code `2`, report a configuration problem.
 - If `ok: false` with exit code `3`, treat it as an MCP/external-service limitation and fallback to `--mode auto` or `--mode local`.
-- Do not ask the user to approve MCP setup unless the task explicitly requires real MCP integration; this MVP only writes a config hint.
-- Do not edit Hermes `config.yaml` unless the user explicitly asks for MCP installation/configuration.
+- `rssAggregator` is configured in `/opt/data/config.yaml`; verify it with `hermes mcp test rssAggregator` when MCP availability matters.
+- Even when `rssAggregator` is available, this MVP pipeline still uses local feedparser in `--mode auto` until a stdio MCP client/normalizer is added.
+- Do not edit Hermes `config.yaml` unless the user explicitly asks for MCP installation/configuration or the configured `rssAggregator` path/env is stale.
 
 ## No Duplicate Runbook Content
 

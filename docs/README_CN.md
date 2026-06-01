@@ -164,6 +164,12 @@ MVP 的 expected behavior：
 - `--mode local`：只使用 local feedparser。
 - `--mode mcp`：寫入 MCP hint，回傳 `ok: false`，並用 exit code `3` 結束，因為真正 MCP fetch 尚未實作。
 
+此環境目前的 Hermes native MCP 狀態：
+
+- `/opt/data/config.yaml` 已有 `mcp_servers.rssAggregator`，指向 `external/mcp-rss-aggregator/build/index.js`，並用 `FEEDS_PATH=data/active_feeds.opml`。
+- `hermes mcp test rssAggregator` 可以連線，並 discovery 到一個 `rss` tool。
+- Daily_news Python pipeline 目前仍不會直接呼叫這個 MCP tool；在加入 stdio MCP client / output normalizer 前，`--mode auto` 仍會使用 local feedparser fallback，並在 items 裡保留 `collector: "local_feedparser"`。
+
 ## 測試
 
 ```bash
