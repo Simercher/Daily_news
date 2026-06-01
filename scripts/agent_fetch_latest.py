@@ -18,13 +18,14 @@ COMMAND = "agent_fetch_latest"
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=["local", "mcp"], default="local")
+    parser.add_argument("--mode", choices=["local", "mcp", "auto"], default="local")
     parser.add_argument("--server", default="imprvhub_mcp_rss_aggregator")
     parser.add_argument("--since-hours", type=int, default=24)
     args = parser.parse_args()
 
     configure_agent_logging(COMMAND)
     try:
+        warnings: list[str] = []
         if args.mode == "mcp":
             generate_mcp_config_hint(args.server)
             print_agent_error(
@@ -36,10 +37,15 @@ def main() -> None:
                 warnings=["Fallback to local mode is available."],
                 exit_code=EXIT_EXTERNAL,
             )
+        if args.mode == "auto":
+            generate_mcp_config_hint(args.server)
+            warnings.append(
+                "MCP fetch is not implemented in this MVP; generated config hint and used local feedparser fallback."
+            )
         items = run_local_fetch(since_hours=args.since_hours)
         status = project_status()
         stats = status["stats"] | {"raw_items": len(items)}
-        print_agent_success(COMMAND, "Latest RSS items fetched.", output_paths(), stats)
+        print_agent_success(COMMAND, "Latest RSS items fetched.", output_paths(), stats, warnings)
     except SystemExit:
         raise
     except Exception as exc:  # noqa: BLE001

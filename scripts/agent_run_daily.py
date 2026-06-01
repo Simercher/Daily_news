@@ -18,7 +18,7 @@ COMMAND = "agent_run_daily"
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=["local", "mcp"], default="local")
+    parser.add_argument("--mode", choices=["local", "mcp", "auto"], default="local")
     parser.add_argument("--server", default="imprvhub_mcp_rss_aggregator")
     parser.add_argument("--since-hours", type=int, default=24)
     parser.add_argument("--force-bootstrap", action="store_true")
@@ -35,22 +35,27 @@ def main() -> None:
                 "--force-bootstrap and --skip-bootstrap cannot be used together.",
                 exit_code=EXIT_CONFIG,
             )
+        warnings: list[str] = []
         if args.mode == "mcp":
             generate_mcp_config_hint(args.server)
             print_agent_error(
                 COMMAND,
                 "MCP fetch is not implemented in this MVP.",
                 "ExternalServiceError",
-                "Run agent_generate_mcp_config.py and call the RSS MCP tool externally, or use --mode local.",
+                "Run agent_generate_mcp_config.py and call the RSS MCP tool externally, or use --mode local/auto.",
                 warnings=["Fallback to local mode is available."],
                 exit_code=3,
+            )
+        if args.mode == "auto":
+            generate_mcp_config_hint(args.server)
+            warnings.append(
+                "MCP fetch is not implemented in this MVP; generated config hint and used local feedparser fallback."
             )
 
         should_bootstrap = args.force_bootstrap or (
             not args.skip_bootstrap
             and (path_is_stale("data/active_feeds.json") or path_is_stale("data/active_feeds.opml"))
         )
-        warnings: list[str] = []
         if should_bootstrap:
             active = run_bootstrap(show_progress=False)
             if not active:
