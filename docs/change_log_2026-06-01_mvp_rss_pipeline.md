@@ -259,8 +259,33 @@ data/news_items_deduped.jsonl: lines=749 size=2848691 collectors=['local_feedpar
 data/logs/mcp_config_hint.json: keys=['capabilities', 'mcp_config', 'recommended', 'repo', 'server_id'] size=579
 ```
 
+### 2026-06-01 official_source 與 MCP feed ID collision follow-up
+
+1. `official_source` conservative allowlist
+   - 原本：active feeds 與 item outputs 沒有官方 / recognized publisher provenance flag，下游只能用 feed name 或 URL 自行推測來源屬性。
+   - 修改：新增 `configs/official_sources.yaml` 與 `src/news_feed_bootstrap/source_classification.py`；`ActiveFeed.official_source`、`NewsItem.official_source` 會由 bootstrap / fetch / dedup pipeline 傳遞到 `data/active_feeds.json`、`data/news_items_raw.jsonl`、`data/news_items_deduped.jsonl`。
+   - 成果：`official_source: true` 可作為下游 cross-source verification 的保守 allowlist / provenance hint；它不是完整可信度分數。未知 blog、aggregator、community feed、vendor feed 預設維持 `false`，直到人工 review 後加入 allowlist。
+   - 最新驗證結果：`uv run pytest -q` 為 `21 passed`；`uv run ruff check src scripts tests` 為 `All checks passed!`。forced auto pipeline 成功，stats 為 `imported_feeds: 282`、`active_feeds: 155`、`inactive_feeds: 127`、`raw_items: 922`、`deduped_items: 818`。
+   - 最新 `official_source` counts：active feeds `true: 80` / `false: 75`；raw items `true: 732` / `false: 190`；deduped items `true: 628` / `false: 190`。
+
+2. `mcp-rss-aggregator` feed ID collision 修正
+   - 原本：local `external/mcp-rss-aggregator` 的 feed map 可能以過粗的 ID key 處理 feeds，造成同 domain 多個 feeds 互相覆蓋，MCP listed feeds 少於 active OPML outlines。
+   - 修改：在 gitignored `external/mcp-rss-aggregator/src/index.ts` 做 local patch，feed ID 改由 host + path/query + URL 短 hash 產生，並完成 `npm build`。
+   - 成果：同 domain 多 feed 不再 collision；direct stdio smoke 顯示 active OPML outlines `155`、MCP listed feeds `155`、server log `Loaded 155 feeds from OPML file`，且 MCP `latest --5` 可回傳 items。
+   - Caveat：`external/` 是 gitignored，不應 commit 到 `Daily_news`。本次使用者明確要求不要 fork；若之後需要長期保存這個 MCP fix，應 upstream/fork，或把 local patch 做成明確 setup step / patch artifact。
+
 ## 後續工作
 
 - 真正接上 RSS MCP stdio/client 後，讓 `collector` 使用 `mcp:<server_id>`，並新增 MCP output normalization tests。
+- 持續人工 review `configs/official_sources.yaml`；不要把 `official_source` 當成完整可信度評分。
+- 保存或 upstream/fork ignored `external/mcp-rss-aggregator` 的 feed ID collision fix；目前不要把 external repo commit 進 `Daily_news`。
 - 若要做 production-grade crawl，可考慮 parallel fetch/health check、per-host rate limiting、retry/backoff 與更完整的 feed quality scoring。
 - 下游 LLM 摘要、Discord forum 發送、事件聚類、可信度評分仍不屬於這個 MVP runtime path。
+
+### 2026-06-01 URL normalization dedup hardening
+
+- 原本：normalized exact-URL dedup 已移除固定 UTM keys、`fbclid`、`gclid` 與 fragment，但 host / scheme 大小寫、預設 port、尾端斜線與 query parameter 順序不同時仍可能留下重複文章。
+- 修改：`src/news_feed_bootstrap/dedup.py` 補上 scheme / host lowercase、HTTP `:80` 與 HTTPS `:443` 預設 port 移除、非 root path 尾端斜線統一、query parameter 排序，以及大小寫不敏感的常見 tracking parameter 移除。Tracking keys 現在包含所有 `utm_*`、`fbclid`、`gclid`、`mc_cid`、`mc_eid`、`ref`、`ref_src`、`source`。
+- 成果：同一文章 URL 即使來自不同 RSS feed，或帶有不同 tracking query、fragment、預設 port、大小寫與尾端斜線，仍會落到相同 normalized URL。一般語意 query parameters 仍保留。
+- 範圍限制：這仍是 URL dedup，不會把 AMP、mobile URL、redirect URL 或不同媒體報導的同事件文章自動合併。這些情況需要 publisher-specific canonical rules 或下游 agent 語意處理。
+- 驗證：`uv run pytest -q`、`uv run ruff check src scripts tests`、`git diff --check`。

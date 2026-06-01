@@ -11,11 +11,17 @@ This project is an RSS feed bootstrap and raw news collection layer.
 It prepares:
 
 - active RSS feed metadata;
+- conservative `official_source` provenance on feeds and items;
 - active feed OPML for future MCP handoff;
 - raw RSS item JSONL;
-- deduplicated downstream JSONL.
+- deduplicated downstream JSONL;
+- deterministic exact-URL deduplication output;
+- downstream semantic labels from `profiles/domain-classifier`, including daily section routing and same-event cluster metadata;
+- a structured fulltext-fetch manifest for `rss_reader_mcp`.
 
-It does **not** summarize, classify, rank, cluster, call LLM APIs, post to Discord, fetch paywalled content, bypass access controls, or run a real MCP stdio RSS client yet.
+It does **not** summarize, rank, call LLM APIs from the Python RSS pipeline, post to Discord, fetch paywalled content, bypass access controls, or run a real MCP stdio RSS client yet.
+
+Semantic domain classification and title-similarity same-event clustering are delegated to the Hermes `profiles/domain-classifier` agent after `data/news_items_deduped.jsonl` exists.
 
 ## Runtime Contract
 
@@ -47,10 +53,13 @@ configs/seed_sources.yaml
 -> data/imported_feeds.json and data/imported_feeds.opml
 -> minimum feed health check
 -> data/active_feeds.json and data/active_feeds.opml
--> local RSS item fetch, or auto mode MCP-hint + local fallback
+-> conservative official_source marking from configs/official_sources.yaml
+-> local RSS item fetch, or MCP-first fetch with local fallback
 -> data/news_items_raw.jsonl
 -> normalized exact-URL deduplication
 -> data/news_items_deduped.jsonl
+-> domain-classifier semantic labeling
+-> data/news_item_labels.jsonl
 ```
 
 ## First Steps After Clone
@@ -91,6 +100,150 @@ uv run python scripts/agent_generate_mcp_config.py --server imprvhub_mcp_rss_agg
 uv run python scripts/agent_fetch_latest.py --mode local --since-hours 24
 uv run python scripts/agent_dedup.py
 ```
+
+After this, dispatch `profiles/domain-classifier` to read `data/news_items_deduped.jsonl` and write `data/news_item_labels.jsonl`.
+
+The classifier output is the first layer that should contain:
+
+- `daily_section`: `international`, `macro`, `stocks`, `tech_ai`, or `other`;
+- `event_cluster_id`: stable same-event cluster ID for this batch;
+- `event_primary_article_id`: representative article for the cluster;
+- `duplicate_of_article_id`: `null` for the primary article, otherwise the cluster primary article ID;
+- `same_event_confidence` and `same_event_reason`.
+
+The classifier must not edit `data/news_items_deduped.jsonl`; it writes labels beside it so downstream ranking/digest generation can choose one primary article per event cluster while retaining supporting sources.
+
+## Fulltext Fetch Contract
+
+`rss_reader_mcp` is the next-stage MCP server for fulltext extraction. Its GitHub source is:
+
+```text
+https://github.com/kwp-lab/rss-reader-mcp.git
+```
+
+The repo should be placed under `external/rss-reader-mcp/` in the same style as `external/mcp-rss-aggregator/`.
+
+### Fulltext stage purpose
+
+`rss_reader_mcp` does **not** classify or summarize. It only:
+
+1. reads `data/news_item_labels.jsonl`;
+2. fetches article fulltext using the manifest's URLs and hints;
+3. writes a fulltext-enriched JSONL for later aggregation agents.
+
+### Fulltext input
+
+Primary input:
+
+```text
+data/news_item_labels.jsonl
+```
+
+Every row should include at least:
+
+- `article_id`
+- `url`
+- `canonical_url`
+- `feed_url`
+- `title`
+- `published_at`
+- `collector`
+- `official_source`
+- `language`
+- `dedupe_key`
+- `same_event_cluster_id`
+- `same_event_cluster_rank`
+- `same_event_cluster_size`
+- `same_event_cluster_primary_id`
+- `primary_domain`
+- `secondary_domains`
+- `topics`
+- `entities`
+- `content_type`
+- `geography`
+- `confidence`
+- `needs_human_review`
+- `fetch_required`
+- `fetch_priority`
+- `fetch_hints`
+
+`fetch_hints` should be an object that can carry preferences such as:
+
+- `prefer_fulltext`
+- `prefer_primary_source`
+- `prefer_canonical_url`
+- `cluster_primary`
+- `allow_redirects`
+
+### Fulltext output
+
+Primary output:
+
+```text
+data/news_item_fulltext.jsonl
+```
+
+Each output row should preserve the manifest fields above and add:
+
+- `fulltext`
+- `fulltext_source`
+- `fulltext_fetched_at`
+- `fulltext_status`
+- `fulltext_word_count`
+- `fulltext_language`
+- `fulltext_excerpt`
+- `fetch_attempted`
+- `fetch_error`
+
+Recommended `fulltext_status` values:
+
+- `success`
+- `partial`
+- `failed`
+- `blocked`
+- `skipped`
+
+Recommended `fulltext_source` values:
+
+- `rss_reader_mcp`
+- `rss_feed_content`
+- `canonical_webpage`
+- `publisher_article`
+- `mirror`
+- `unknown`
+
+### Pipeline placement
+
+```text
+RSS fetch
+-> URL exact dedup
+-> domain-classifier
+   - title clustering / same-event grouping
+   - domain classification
+   - fetch hints / priority
+-> data/news_item_labels.jsonl
+-> rss_reader_mcp fulltext fetch
+-> data/news_item_fulltext.jsonl
+-> later summary / clustering / briefing agents
+```
+
+### File responsibilities
+
+- `data/news_item_labels.jsonl`: enriched article manifest used by `rss_reader_mcp`.
+- `data/news_item_fulltext.jsonl`: fulltext-enriched article records for later summarization/aggregation agents.
+- `src/news_feed_bootstrap/rss_reader_mcp.py`: Python-side MCP adapter that turns manifest rows into MCP calls.
+- `src/news_feed_bootstrap/fulltext_fetcher.py`: orchestration layer that drives the fulltext stage.
+- `scripts/agent_fetch_fulltext.py`: manual / agent entrypoint for fulltext extraction.
+
+### Non-goals
+
+`rss_reader_mcp` does **not**:
+
+- summarize articles;
+- write daily digests;
+- assign categories;
+- choose the final briefing articles;
+- replace the domain-classifier stage.
 
 ## Bootstrap and Timeout Controls
 
@@ -136,6 +289,9 @@ Hermes native MCP status in the current deployment:
 
 - `/opt/data/config.yaml` contains `mcp_servers.rssAggregator` with command `node`, args `/opt/data/plugins/Daily_news/external/mcp-rss-aggregator/build/index.js`, and env `FEEDS_PATH=/opt/data/plugins/Daily_news/data/active_feeds.opml`.
 - `hermes mcp test rssAggregator` should connect and discover one `rss` tool.
+- Direct MCP stdio smoke has worked against the active OPML: 155 OPML outlines, 155 MCP-listed feeds, and `latest --5` returned items.
+- The local ignored `external/mcp-rss-aggregator` patch generates feed IDs from host + path/query + short URL hash, so same-domain feeds no longer overwrite each other in the MCP feed map.
+- `external/` is gitignored. Do not commit it in this repo; preserve this patch later by upstreaming/forking or by adding an explicit setup patch step if MCP persistence is needed.
 - This validates that the MCP server can run under Hermes, but the Daily_news Python pipeline still does not call the MCP tool directly. Until a stdio MCP client and output normalizer are implemented, `--mode auto` remains the correct automation default and should produce `collector: "local_feedparser"`.
 
 ## JSON Contract
@@ -170,20 +326,46 @@ Failure shape:
 }
 ```
 
+Output artifact contract additions:
+
+- `data/active_feeds.json` stores active feed rows with `official_source: bool`.
+- `data/news_items_raw.jsonl` stores raw item rows with `collector` and `official_source: bool`.
+- `data/news_items_deduped.jsonl` stores downstream rows with top-level `collector`, top-level `official_source: bool`, and the original raw item under `raw`.
+- `official_source: true` is only a conservative allowlist/provenance hint for downstream cross-source verification. It is **not** a full credibility score; unknown blogs, aggregators, community feeds, and vendor feeds remain `false` until reviewed.
+
+Representative downstream row fields:
+
+```json
+{
+  "id": "...",
+  "title": "...",
+  "url": "...",
+  "normalized_url": "...",
+  "feed_url": "...",
+  "collector": "local_feedparser",
+  "official_source": true,
+  "raw": {
+    "collector": "local_feedparser",
+    "official_source": true
+  }
+}
+```
+
 ## Important Files
 
 | Path | Purpose |
 | --- | --- |
 | `configs/seed_sources.yaml` | Curated OPML/TXT seed sources; `enabled: false` keeps candidates without importing them. |
+| `configs/official_sources.yaml` | Conservative allowlist used to mark `official_source` on active feeds and items. |
 | `data/imported_feeds.json` | Imported feed candidates. |
 | `data/imported_feeds.opml` | Imported feed candidates as OPML. |
 | `data/feed_health.jsonl` | Feed health check results. |
-| `data/active_feeds.json` | Active feed metadata. |
+| `data/active_feeds.json` | Active feed metadata, including `official_source`. |
 | `data/active_feeds.opml` | OPML handoff file for RSS MCP servers. |
 | `data/inactive_feeds.json` | Inactive or failed feed candidates plus health information. |
-| `data/news_items_raw.jsonl` | Raw RSS item output. |
-| `data/news_items_deduped.jsonl` | Main downstream model/agent input. |
-| `data/logs/*.log` | Script logs. |
+| `data/news_items_raw.jsonl` | Raw RSS item output, including `collector` and `official_source`. |
+| `data/news_items_deduped.jsonl` | Main downstream model/agent input, including top-level `collector` and `official_source`. |
+| `data/news_item_labels.jsonl` | Enriched article manifest with clustering, domain labels, and fulltext fetch hints. |
 | `data/logs/mcp_config_hint.json` | Generated MCP config hint. |
 
 Downstream agents should usually read:
@@ -192,7 +374,14 @@ Downstream agents should usually read:
 data/news_items_deduped.jsonl
 ```
 
-Rows include `collector`, currently `local_feedparser`. Future MCP integration should write `collector: "mcp:<server_id>"`.
+Ranking and digest candidate agents should read both:
+
+```text
+data/news_items_deduped.jsonl
+data/news_item_labels.jsonl
+```
+
+Rows include `collector`, currently `local_feedparser`, and `official_source`, currently derived from `configs/official_sources.yaml`. Future MCP integration should write `collector: "mcp:<server_id>"` while preserving `official_source` propagation.
 
 ## Source Configuration
 
