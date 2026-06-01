@@ -6,7 +6,15 @@ seed_sources:
     repository: https://github.com/scripting/feedsForJournalists
     url: https://raw.githubusercontent.com/scripting/feedsForJournalists/master/list.opml
     priority: high
-    topics: [news, journalism]
+    trust_tier: aggregator
+    language: en
+    region: global
+    topics: [news, journalism, world]
+    dedupe_group: feeds_for_journalists
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 360
+    commercial_use_risk: unknown
+    notes: "Broad seed list. Downstream domain scoring and dedupe required."
 
   - id: feeds_for_journalists_text
     name: feedsForJournalists text list
@@ -15,8 +23,15 @@ seed_sources:
     repository: https://github.com/scripting/feedsForJournalists
     url: https://raw.githubusercontent.com/scripting/feedsForJournalists/master/list.txt
     priority: high
+    trust_tier: aggregator
+    language: en
+    region: global
     topics: [news, journalism]
-    notes: "Fallback candidate only; mostly overlaps with the OPML list."
+    dedupe_group: feeds_for_journalists
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 360
+    commercial_use_risk: unknown
+    notes: "Fallback only; mostly overlaps with OPML."
 
   - id: awesome_rss_feeds_us
     name: plenaryapp awesome-rss-feeds United States
@@ -25,8 +40,15 @@ seed_sources:
     repository: https://github.com/plenaryapp/awesome-rss-feeds
     url: https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/countries/with_category/United%20States.opml
     priority: medium_high
+    trust_tier: aggregator
+    language: en
+    region: us
     topics: [news, country, united_states]
-    notes: "OPML contains unescaped ampersands; importer needs tolerant fallback."
+    dedupe_group: awesome_rss_feeds
+    requires_tolerant_parser: true
+    fetch_interval_minutes: 360
+    commercial_use_risk: unknown
+    notes: "OPML may contain unescaped ampersands; importer has tolerant fallback."
 
   - id: awesome_rss_feeds_uk
     name: plenaryapp awesome-rss-feeds United Kingdom
@@ -35,8 +57,15 @@ seed_sources:
     repository: https://github.com/plenaryapp/awesome-rss-feeds
     url: https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/countries/with_category/United%20Kingdom.opml
     priority: medium_high
+    trust_tier: aggregator
+    language: en
+    region: uk
     topics: [news, country, united_kingdom]
-    notes: "OPML contains unescaped ampersands; importer needs tolerant fallback."
+    dedupe_group: awesome_rss_feeds
+    requires_tolerant_parser: true
+    fetch_interval_minutes: 360
+    commercial_use_risk: unknown
+    notes: "OPML may contain unescaped ampersands; importer has tolerant fallback."
 
   - id: awesome_tech_rss
     name: awesome-tech-rss
@@ -45,7 +74,15 @@ seed_sources:
     repository: https://github.com/tuan3w/awesome-tech-rss
     url: https://raw.githubusercontent.com/tuan3w/awesome-tech-rss/main/feeds.opml
     priority: medium
+    trust_tier: aggregator
+    language: en
+    region: global
     topics: [technology, ai, startup, engineering]
+    dedupe_group: awesome_tech_rss
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 360
+    commercial_use_risk: unknown
+    notes: "Useful for tech discovery, but downstream source scoring required."
 
   - id: security_rss
     name: SecurityRSS
@@ -54,8 +91,15 @@ seed_sources:
     repository: https://github.com/arch3rPro/SecurityRSS
     url: https://raw.githubusercontent.com/arch3rPro/SecurityRSS/master/SecurityRSS.opml
     priority: medium
+    trust_tier: aggregator
+    language: en
+    region: global
     topics: [security, cybersecurity]
-    notes: "Cybersecurity specialist source; keep disabled unless building a security section."
+    dedupe_group: security_rss
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 360
+    commercial_use_risk: unknown
+    notes: "Enable only when building a cybersecurity section."
 
   - id: awesome_ml_ai_rss_feed
     name: awesome_ML_AI_RSS_feed
@@ -64,8 +108,15 @@ seed_sources:
     repository: https://github.com/vishalshar/awesome_ML_AI_RSS_feed
     url: https://raw.githubusercontent.com/vishalshar/awesome_ML_AI_RSS_feed/master/feed.opml
     priority: medium
+    trust_tier: aggregator
+    language: en
+    region: global
     topics: [ai, machine_learning, data_science, research]
-    notes: "Specialist AI/ML source; repo default branch is master."
+    dedupe_group: awesome_ml_ai_rss
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 360
+    commercial_use_risk: unknown
+    notes: "Specialist AI/ML source; keep disabled unless building AI research section."
 
   - id: awesome_news_cn_feeds
     name: awesome-newsCN-feeds
@@ -74,5 +125,250 @@ seed_sources:
     repository: https://github.com/RSS-Renaissance/awesome-newsCN-feeds
     url: https://raw.githubusercontent.com/RSS-Renaissance/awesome-newsCN-feeds/master/feedlist.opml
     priority: low
+    trust_tier: aggregator
+    language: zh
+    region: china
     topics: [chinese_news]
-    notes: "Candidate only; may include third-party generated feeds, so keep disabled for the first MVP."
+    dedupe_group: awesome_news_cn
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 360
+    commercial_use_risk: unknown
+    notes: "Chinese-language candidate only; may include third-party generated feeds. Keep disabled for MVP."
+
+  - id: bbc_news_opml
+    name: BBC News RSS OPML
+    type: opml
+    enabled: true
+    repository: null
+    url: http://news.bbc.co.uk/rss/newsonline_uk_edition/feeds.opml
+    priority: high
+    trust_tier: major_media
+    language: en
+    region: global
+    topics: [news, world, international, uk]
+    dedupe_group: bbc
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 30
+    commercial_use_risk: medium
+    notes: "Official BBC RSS OPML."
+
+  - id: federal_reserve_rss_index
+    name: Federal Reserve RSS Feeds
+    type: html_feed_index
+    enabled: true
+    repository: null
+    url: https://www.federalreserve.gov/feeds/feeds.htm
+    priority: high
+    trust_tier: primary
+    language: en
+    region: us
+    topics: [macro, central_bank, monetary_policy, finance, official]
+    dedupe_group: federal_reserve
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 30
+    commercial_use_risk: low
+    notes: "Official Federal Reserve RSS index."
+
+  - id: ecb_rss_index
+    name: European Central Bank RSS Feeds
+    type: html_feed_index
+    enabled: true
+    repository: null
+    url: https://www.ecb.europa.eu/home/html/rss.en.html
+    priority: high
+    trust_tier: primary
+    language: en
+    region: eu
+    topics: [macro, central_bank, monetary_policy, finance, europe, official]
+    dedupe_group: ecb
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 30
+    commercial_use_risk: low
+    notes: "Official ECB RSS index."
+
+  - id: sec_press_releases_feed_discovery
+    name: U.S. SEC Newsroom RSS Discovery
+    type: feed_discovery
+    enabled: true
+    repository: null
+    url: https://www.sec.gov/newsroom/press-releases
+    priority: high
+    trust_tier: primary
+    language: en
+    region: us
+    topics: [stocks, markets, regulation, sec, official]
+    dedupe_group: sec
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 30
+    commercial_use_risk: low
+    notes: "Discover official SEC RSS/Atom feeds if available."
+
+  - id: us_treasury_feed_discovery
+    name: U.S. Treasury RSS Discovery
+    type: feed_discovery
+    enabled: true
+    repository: null
+    url: https://home.treasury.gov/news/press-releases
+    priority: high
+    trust_tier: primary
+    language: en
+    region: us
+    topics: [macro, sanctions, finance, treasury, official]
+    dedupe_group: us_treasury
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 30
+    commercial_use_risk: low
+    notes: "Discover official Treasury RSS/Atom feeds if available."
+
+  - id: imf_feed_discovery
+    name: IMF RSS Discovery
+    type: feed_discovery
+    enabled: true
+    repository: null
+    url: https://www.imf.org/en/News
+    priority: high
+    trust_tier: primary
+    language: en
+    region: global
+    topics: [macro, global_economy, finance, official]
+    dedupe_group: imf
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 60
+    commercial_use_risk: low
+    notes: "Discover official IMF RSS/Atom feeds if available."
+
+  - id: un_news_rss
+    name: UN News RSS
+    type: rss
+    enabled: true
+    repository: null
+    url: https://news.un.org/feed/subscribe/en/news/all/rss.xml
+    priority: medium_high
+    trust_tier: primary
+    language: en
+    region: global
+    topics: [international, geopolitics, humanitarian, official]
+    dedupe_group: un
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 60
+    commercial_use_risk: low
+    notes: "Official UN News RSS feed."
+
+  - id: nato_feed_discovery
+    name: NATO News RSS Discovery
+    type: feed_discovery
+    enabled: true
+    repository: null
+    url: https://www.nato.int/cps/en/natohq/news.htm
+    priority: medium_high
+    trust_tier: primary
+    language: en
+    region: global
+    topics: [international, geopolitics, defense, official]
+    dedupe_group: nato
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 60
+    commercial_use_risk: low
+    notes: "Discover official NATO RSS/Atom feeds if available."
+
+  - id: reuters_google_news_rss
+    name: Reuters via Google News RSS
+    type: google_news_rss
+    enabled: true
+    repository: null
+    url: "https://news.google.com/rss/search?q=when:2d%20site:reuters.com&hl=en-US&gl=US&ceid=US:en"
+    priority: high
+    trust_tier: major_media
+    language: en
+    region: global
+    topics: [news, international, finance, markets]
+    dedupe_group: reuters
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 30
+    commercial_use_risk: medium
+    notes: "Fallback only. Prefer official Reuters feed if available in future."
+
+  - id: ap_google_news_rss
+    name: Associated Press via Google News RSS
+    type: google_news_rss
+    enabled: true
+    repository: null
+    url: "https://news.google.com/rss/search?q=when:2d%20site:apnews.com&hl=en-US&gl=US&ceid=US:en"
+    priority: high
+    trust_tier: major_media
+    language: en
+    region: global
+    topics: [news, international, united_states]
+    dedupe_group: ap
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 30
+    commercial_use_risk: medium
+    notes: "Fallback only. Prefer official AP licensed feed if available in future."
+
+  - id: openai_feed_discovery
+    name: OpenAI News Feed Discovery
+    type: feed_discovery
+    enabled: true
+    repository: null
+    url: https://openai.com/news/
+    priority: high
+    trust_tier: primary
+    language: en
+    region: global
+    topics: [technology, ai, official, company]
+    dedupe_group: openai
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 60
+    commercial_use_risk: low
+    notes: "Official OpenAI news page. Use RSS/Atom only if discoverable."
+
+  - id: anthropic_feed_discovery
+    name: Anthropic News Feed Discovery
+    type: feed_discovery
+    enabled: true
+    repository: null
+    url: https://www.anthropic.com/news
+    priority: high
+    trust_tier: primary
+    language: en
+    region: global
+    topics: [technology, ai, official, company]
+    dedupe_group: anthropic
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 60
+    commercial_use_risk: low
+    notes: "Official Anthropic news page. Use RSS/Atom only if discoverable."
+
+  - id: google_deepmind_feed_discovery
+    name: Google DeepMind Blog Feed Discovery
+    type: feed_discovery
+    enabled: true
+    repository: null
+    url: https://deepmind.google/discover/blog/
+    priority: high
+    trust_tier: primary
+    language: en
+    region: global
+    topics: [technology, ai, research, official, company]
+    dedupe_group: google_deepmind
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 60
+    commercial_use_risk: low
+    notes: "Official Google DeepMind blog. Use RSS/Atom only if discoverable."
+
+  - id: nvidia_feed_discovery
+    name: NVIDIA Blog Feed Discovery
+    type: feed_discovery
+    enabled: true
+    repository: null
+    url: https://blogs.nvidia.com/
+    priority: high
+    trust_tier: primary
+    language: en
+    region: global
+    topics: [technology, ai, semiconductors, company]
+    dedupe_group: nvidia
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 60
+    commercial_use_risk: low
+    notes: "Official NVIDIA blog/news. Use RSS/Atom only if discoverable."

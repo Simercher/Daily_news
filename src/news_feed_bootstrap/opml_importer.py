@@ -4,8 +4,9 @@ import re
 import warnings
 import xml.etree.ElementTree as ET
 from html import unescape
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
+from bs4 import BeautifulSoup
 import requests
 from defusedxml import ElementTree as SafeET
 
@@ -48,6 +49,13 @@ def _outline_attrs_from_tolerant_regex(xml: str) -> list[dict[str, str]]:
     return outlines
 
 
+def _outline_path_topics(attrs: dict[str, str]) -> list[str]:
+    category = attrs.get("category") or attrs.get("tags")
+    if not category:
+        return []
+    return [part.strip().lower().replace(" ", "_") for part in re.split(r"[,/|]", category) if part.strip()]
+
+
 def import_opml(file_path_or_url: str) -> list[FeedCandidate]:
     xml = _read_opml(file_path_or_url)
     candidates: list[FeedCandidate] = []
@@ -62,6 +70,65 @@ def import_opml(file_path_or_url: str) -> list[FeedCandidate]:
                 feed_url=feed_url,
                 homepage=attrs.get("htmlUrl"),
                 discovered_from=file_path_or_url,
+                topics=_outline_path_topics(attrs),
+            )
+        )
+    return candidates
+
+
+def import_direct_feed(url: str, *, collector: str = "local_feedparser") -> list[FeedCandidate]:
+    parsed = urlparse(url)
+    publisher = parsed.netloc.removeprefix("www.") if parsed.netloc else None
+    return [FeedCandidate(publisher=publisher, feed_url=url, discovered_from=url, collector=collector)]
+
+
+def discover_feeds_from_html(url: str) -> list[FeedCandidate]:
+    response = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
+    response.raise_for_status()
+    soup = BeautifulSoup(response.text, "html.parser")
+    candidates: list[FeedCandidate] = []
+    seen: set[str] = set()
+
+    for link in soup.find_all("link"):
+        raw_rel = link.get("rel") or []
+        rel_values = raw_rel if isinstance(raw_rel, list) else str(raw_rel).split()
+        rel = {str(part).lower() for part in rel_values}
+        mime_type = str(link.get("type") or "").lower()
+        href = link.get("href")
+        if "alternate" not in rel or not href:
+            continue
+        if mime_type not in {"application/rss+xml", "application/atom+xml", "application/rdf+xml"}:
+            continue
+        feed_url = urljoin(url, href)
+        if feed_url in seen:
+            continue
+        seen.add(feed_url)
+        candidates.append(
+            FeedCandidate(
+                publisher=link.get("title"),
+                feed_url=feed_url,
+                homepage=url,
+                discovered_from=url,
+            )
+        )
+
+    for anchor in soup.find_all("a"):
+        href = anchor.get("href")
+        if not href:
+            continue
+        text_blob = " ".join(str(part) for part in [anchor.get_text(" ", strip=True), href]).lower()
+        if not any(marker in text_blob for marker in ("rss", "atom", ".xml", "/feed")):
+            continue
+        feed_url = urljoin(url, href)
+        if feed_url in seen:
+            continue
+        seen.add(feed_url)
+        candidates.append(
+            FeedCandidate(
+                publisher=anchor.get_text(" ", strip=True) or None,
+                feed_url=feed_url,
+                homepage=url,
+                discovered_from=url,
             )
         )
     return candidates
@@ -99,6 +166,23 @@ def merge_discovered(candidates: list[FeedCandidate], path: str = "data/imported
     return merged
 
 
+def _apply_seed_metadata(candidate: FeedCandidate, seed: SeedSource) -> FeedCandidate:
+    candidate.source_id = seed.id
+    candidate.source_name = seed.name
+    candidate.priority = seed.priority
+    candidate.trust_tier = seed.trust_tier
+    candidate.language = candidate.language or seed.language
+    candidate.region = candidate.region or seed.region
+    candidate.dedupe_group = seed.dedupe_group
+    candidate.commercial_use_risk = seed.commercial_use_risk
+    if seed.type == "google_news_rss":
+        candidate.collector = "google_news_rss"
+    elif seed.type == "generated_rss":
+        candidate.collector = "generated_rss"
+    candidate.topics = sorted(set(candidate.topics + seed.topics))
+    return candidate
+
+
 def import_seed_lists(config_path: str = "configs/seed_sources.yaml") -> list[FeedCandidate]:
     data = read_yaml(config_path, {"seed_sources": []})
     imported: list[FeedCandidate] = []
@@ -106,19 +190,27 @@ def import_seed_lists(config_path: str = "configs/seed_sources.yaml") -> list[Fe
         seed = SeedSource(**row)
         if not seed.enabled:
             continue
-        if seed.type not in {"opml", "text"}:
+        if seed.type in {"github_page", "web_directory"}:
             warnings.warn(
                 f"unsupported_seed_type: {seed.id}; raw OPML/text URL must be confirmed manually",
                 stacklevel=2,
             )
             continue
         try:
-            candidates = import_opml(seed.url) if seed.type == "opml" else import_text_feed_list(seed.url)
+            if seed.type == "opml":
+                candidates = import_opml(seed.url)
+            elif seed.type == "text":
+                candidates = import_text_feed_list(seed.url)
+            elif seed.type in {"rss", "google_news_rss", "generated_rss"}:
+                candidates = import_direct_feed(seed.url)
+            elif seed.type in {"html_feed_index", "feed_discovery"}:
+                candidates = discover_feeds_from_html(seed.url)
+                if not candidates:
+                    warnings.warn(f"feed_not_found: {seed.id}: {seed.url}", stacklevel=2)
+            else:
+                candidates = []
             for candidate in candidates:
-                candidate.source_id = seed.id
-                candidate.source_name = seed.name
-                candidate.priority = seed.priority
-                candidate.topics = sorted(set(candidate.topics + seed.topics))
+                _apply_seed_metadata(candidate, seed)
             imported.extend(candidates)
         except Exception as exc:  # noqa: BLE001 - keep batch import moving.
             warnings.warn(f"failed_seed_import: {seed.id}: {exc}", stacklevel=2)

@@ -82,6 +82,7 @@ def output_paths() -> dict:
         "inactive_feeds": "data/inactive_feeds.json",
         "news_items_raw": "data/news_items_raw.jsonl",
         "news_items_deduped": "data/news_items_deduped.jsonl",
+        "news_item_labels": "data/news_item_labels.jsonl",
         "mcp_config_hint": "data/logs/mcp_config_hint.json",
     }
 

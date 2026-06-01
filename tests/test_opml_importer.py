@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from news_feed_bootstrap.models import FeedCandidate
-from news_feed_bootstrap.opml_importer import import_opml, import_seed_lists
+from news_feed_bootstrap.opml_importer import discover_feeds_from_html, import_opml, import_seed_lists
 
 
 def test_import_opml_falls_back_when_xml_contains_unescaped_ampersand(tmp_path: Path) -> None:
@@ -60,3 +60,58 @@ seed_sources:
     assert imported_urls == ["https://example.com/enabled.opml"]
     assert len(feeds) == 1
     assert feeds[0].source_id == "enabled_source"
+
+
+def test_import_seed_lists_carries_source_metadata(monkeypatch, tmp_path: Path) -> None:
+    config = tmp_path / "seed_sources.yaml"
+    config.write_text(
+        """
+seed_sources:
+  - id: fed
+    name: Federal Reserve
+    type: rss
+    enabled: true
+    url: https://example.com/fed.xml
+    priority: high
+    trust_tier: primary
+    language: en
+    region: us
+    topics: [macro, official]
+    dedupe_group: federal_reserve
+    commercial_use_risk: low
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("news_feed_bootstrap.opml_importer.merge_discovered", lambda candidates: candidates)
+
+    feeds = import_seed_lists(str(config))
+
+    assert len(feeds) == 1
+    assert feeds[0].source_id == "fed"
+    assert feeds[0].trust_tier == "primary"
+    assert feeds[0].language == "en"
+    assert feeds[0].region == "us"
+    assert feeds[0].dedupe_group == "federal_reserve"
+    assert feeds[0].topics == ["macro", "official"]
+
+
+def test_discover_feeds_from_html_finds_alternate_and_relative_links(monkeypatch) -> None:
+    class FakeResponse:
+        text = """
+<html>
+  <head>
+    <link rel="alternate" type="application/rss+xml" title="Main RSS" href="/rss.xml">
+    <link rel="alternate" type="application/atom+xml" title="Atom" href="https://example.com/atom.xml">
+  </head>
+</html>
+"""
+
+        def raise_for_status(self) -> None:
+            return None
+
+    monkeypatch.setattr("news_feed_bootstrap.opml_importer.requests.get", lambda *args, **kwargs: FakeResponse())
+
+    feeds = discover_feeds_from_html("https://example.com/news")
+
+    assert [feed.feed_url for feed in feeds] == ["https://example.com/rss.xml", "https://example.com/atom.xml"]
+    assert feeds[0].publisher == "Main RSS"

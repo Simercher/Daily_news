@@ -13,11 +13,35 @@ class PipelineModel(BaseModel):
 class SeedSource(PipelineModel):
     id: str
     name: str
-    type: Literal["opml", "text", "github_page", "web_directory"]
+    type: Literal[
+        "opml",
+        "rss",
+        "text",
+        "html_feed_index",
+        "feed_discovery",
+        "google_news_rss",
+        "generated_rss",
+        "github_page",
+        "web_directory",
+    ]
     url: str
     repository: str | None = None
     priority: Literal["high", "medium_high", "medium", "low"] = "medium"
+    trust_tier: Literal[
+        "primary",
+        "major_media",
+        "specialist",
+        "aggregator",
+        "third_party_generated",
+        "unknown",
+    ] = "unknown"
+    language: str | None = None
+    region: str | None = None
     topics: list[str] = Field(default_factory=list)
+    dedupe_group: str | None = None
+    requires_tolerant_parser: bool = False
+    fetch_interval_minutes: int = 360
+    commercial_use_risk: Literal["low", "medium", "high", "unknown"] = "unknown"
     enabled: bool = True
     notes: str | None = None
 
@@ -32,6 +56,10 @@ class FeedCandidate(PipelineModel):
     language: str | None = None
     topics: list[str] = Field(default_factory=list)
     priority: str | None = None
+    trust_tier: str | None = None
+    dedupe_group: str | None = None
+    commercial_use_risk: str | None = None
+    collector: str = "local_feedparser"
     source_id: str | None = None
     source_name: str | None = None
 
@@ -64,9 +92,14 @@ class ActiveFeed(PipelineModel):
     region: str | None = None
     topics: list[str] = Field(default_factory=list)
     priority: str | None = None
+    trust_tier: str | None = None
+    dedupe_group: str | None = None
+    commercial_use_risk: str | None = None
+    collector: str = "local_feedparser"
     source_id: str | None = None
     source_name: str | None = None
     feed_title: str | None = None
+    official_source: bool = False
     last_published_at: datetime | None = None
     checked_at: datetime
 
@@ -87,6 +120,11 @@ class NewsItem(PipelineModel):
     content_level: Literal["summary_only", "partial", "full_text"]
     fetch_status: Literal["rss_only", "success", "paywall", "blocked", "parse_failed", "http_error", "skipped"]
     collector: str = "local_feedparser"
+    official_source: bool = False
     language: str | None = None
     topics: list[str] = Field(default_factory=list)
+    trust_tier: str | None = None
+    source_id: str | None = None
+    dedupe_key: str | None = None
+    confidence: Literal["high", "medium", "low"] = "medium"
     importance_score: float | None = None

@@ -1,0 +1,95 @@
+# Conservative first-party / recognized publisher allowlist for cross-source validation.
+# Unknown blogs, aggregators, community feeds, and vendor blogs should remain false until reviewed.
+official_domains:
+  - abcnews.go.com
+  - feeds.abcnews.com
+  - aljazeera.com
+  - apnews.com
+  - axios.com
+  - bbc.co.uk
+  - bbci.co.uk
+  - bloomberg.com
+  - blogs.nvidia.com
+  - cbc.ca
+  - cbsnews.com
+  - cnbc.com
+  - deepmind.google
+  - cnn.com
+  - dailymail.co.uk
+  - dw.com
+  - dw.de
+  - economist.com
+  - engadget.com
+  - euronews.com
+  - fastcompany.com
+  - federalreserve.gov
+  - feeds.foxnews.com
+  - foxnews.com
+  - ft.com
+  - home.treasury.gov
+  - huffpost.com
+  - independent.co.uk
+  - imf.org
+  - latimes.com
+  - marketwatch.com
+  - nature.com
+  - news.mit.edu
+  - news.un.org
+  - nato.int
+  - news.yahoo.com
+  - npr.org
+  - nytimes.com
+  - openai.com
+  - politico.com
+  - qz.com
+  - reuters.com
+  - rss.cbc.ca
+  - sec.gov
+  - sciencedaily.com
+  - sciencealert.com
+  - scientificamerican.com
+  - slate.com
+  - spiegel.de
+  - techcrunch.com
+  - technologyreview.com
+  - theatlantic.com
+  - theguardian.com
+  - theverge.com
+  - time.com
+  - vox.com
+  - washingtonpost.com
+  - wired.com
+  - wsj.com
+
+official_title_patterns:
+  - ABC News
+  - Al Jazeera
+  - Axios
+  - BBC News
+  - CBC |
+  - CBSNews
+  - CBS News
+  - CNBC
+  - Daily Express
+  - Deutsche Welle
+  - Engadget
+  - Face The Nation
+  - Fast Company
+  - Fox News
+  - Guardian
+  - L.A. Times
+  - Mail Online
+  - MIT News
+  - NYT >
+  - Nature
+  - Politico
+  - Reuters
+  - ScienceAlert
+  - ScienceDaily
+  - Slate
+  - TechCrunch
+  - The Atlantic
+  - The Independent
+  - The Verge
+  - Wired
+  - Yahoo News

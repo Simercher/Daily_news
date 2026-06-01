@@ -53,3 +53,22 @@ def test_fetch_feed_items_records_published_fallback(monkeypatch, tmp_path: Path
     assert items[0].published_at is not None
     assert items[0].published_at_fallback is True
     assert items[0].collector == "local_feedparser"
+
+
+def test_fetch_feed_items_marks_official_source_from_active_feed(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(requests, "get", lambda *args, **kwargs: FakeResponse())
+    active = tmp_path / "active.yaml"
+    output = tmp_path / "items.jsonl"
+    active.write_text(
+        "feeds:\n"
+        "  - publisher: Example\n"
+        "    feed_url: https://example.com/rss.xml\n"
+        "    official_source: true\n",
+        encoding="utf-8",
+    )
+
+    items = fetch_feed_items(str(active), since_hours=24, output_path=str(output))
+
+    assert len(items) == 1
+    assert items[0].official_source is True
+    assert '"official_source": true' in output.read_text(encoding="utf-8")

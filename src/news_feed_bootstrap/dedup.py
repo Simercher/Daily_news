@@ -5,14 +5,54 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from .models import NewsItem
 
-TRACKING_PARAMS = {"utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "fbclid", "gclid"}
+TRACKING_PARAMS = {
+    "fbclid",
+    "gclid",
+    "mc_cid",
+    "mc_eid",
+    "ref",
+    "ref_src",
+    "source",
+}
+TRACKING_PARAM_PREFIXES = ("utm_",)
 
 
 def normalize_url(url: str) -> str:
     parsed = urlparse(url.strip())
-    query = [(k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True) if k not in TRACKING_PARAMS]
-    normalized = parsed._replace(fragment="", query=urlencode(query, doseq=True))
+    scheme = parsed.scheme.lower()
+    hostname = (parsed.hostname or "").lower()
+    port = parsed.port
+    if port is not None and not ((scheme == "http" and port == 80) or (scheme == "https" and port == 443)):
+        hostname = f"{hostname}:{port}"
+    if parsed.username is not None:
+        userinfo = parsed.username
+        if parsed.password is not None:
+            userinfo = f"{userinfo}:{parsed.password}"
+        hostname = f"{userinfo}@{hostname}"
+
+    path = parsed.path
+    if path != "/":
+        path = path.rstrip("/")
+
+    query = [
+        (key, value)
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        if not _is_tracking_param(key)
+    ]
+    query.sort()
+    normalized = parsed._replace(
+        scheme=scheme,
+        netloc=hostname,
+        path=path,
+        fragment="",
+        query=urlencode(query, doseq=True),
+    )
     return urlunparse(normalized)
+
+
+def _is_tracking_param(key: str) -> bool:
+    normalized_key = key.lower()
+    return normalized_key in TRACKING_PARAMS or normalized_key.startswith(TRACKING_PARAM_PREFIXES)
 
 
 def compute_item_id(url: str | None, title: str | None = None, published_at: object | None = None) -> str:

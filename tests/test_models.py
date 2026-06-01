@@ -18,6 +18,7 @@ def test_seed_source_can_be_disabled() -> None:
 def test_active_feed_create() -> None:
     feed = ActiveFeed(feed_url="https://example.com/rss.xml", checked_at=datetime.now(UTC))
     assert feed.feed_url == "https://example.com/rss.xml"
+    assert feed.official_source is False
 
 
 def test_news_item_create() -> None:
@@ -33,3 +34,4 @@ def test_news_item_create() -> None:
     assert item.title == "Title"
     assert item.topics == []
     assert item.collector == "local_feedparser"
+    assert item.official_source is False
