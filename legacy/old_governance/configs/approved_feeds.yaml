@@ -1,0 +1,221 @@
+feeds:
+- id: null
+  publisher: The Guardian
+  feed_url: https://www.theguardian.com/international/rss
+  homepage: https://www.theguardian.com/international
+  discovered_from: homepage_alternate_link
+  official: true
+  publisher_type: mainstream_media
+  region: global
+  language: en
+  topics:
+  - world
+  - environment
+  - business
+  enabled: true
+  priority: medium_high
+  validation:
+    feed_url: https://www.theguardian.com/international/rss
+    status: active
+    http_status: 200
+    content_type: text/xml; charset=UTF-8
+    parse_ok: true
+    feed_title: The Guardian
+    entry_count: 112
+    last_published_at: '2026-06-01T04:08:42Z'
+    items_7d: 105
+    items_30d: 107
+    has_title_rate: 1.0
+    has_link_rate: 1.0
+    has_pub_date_rate: 1.0
+    duplicate_url_rate: 0.0
+    has_summary_rate: 1.0
+    has_full_content_rate: 0.0
+    checked_at: '2026-06-01T04:24:36.885150Z'
+  score:
+    feed_url: https://www.theguardian.com/international/rss
+    source_score: 92.0
+    feed_score: 100.0
+    total_score: 94.4
+    decision: accept_core_source
+    reasons:
+    - publisher_type=mainstream_media
+    - official=true
+    - parse_ok
+    - http_200
+    - recent_7d
+    - active_30d
+    - title_complete
+    - link_complete
+    - pub_dates
+    - low_duplicates
+    - summaries
+  source_score: 92.0
+  feed_score: 100.0
+  total_score: 94.4
+  decision: accept_core_source
+- id: null
+  publisher: The Guardian
+  feed_url: https://www.theguardian.com/rss
+  homepage: https://www.theguardian.com/international
+  discovered_from: common_path
+  official: true
+  publisher_type: mainstream_media
+  region: global
+  language: en
+  topics:
+  - world
+  - environment
+  - business
+  enabled: true
+  priority: medium_high
+  validation:
+    feed_url: https://www.theguardian.com/rss
+    status: active
+    http_status: 200
+    content_type: text/xml; charset=UTF-8
+    parse_ok: true
+    feed_title: The Guardian
+    entry_count: 137
+    last_published_at: '2026-06-01T04:08:42Z'
+    items_7d: 133
+    items_30d: 133
+    has_title_rate: 1.0
+    has_link_rate: 1.0
+    has_pub_date_rate: 1.0
+    duplicate_url_rate: 0.0
+    has_summary_rate: 1.0
+    has_full_content_rate: 0.0
+    checked_at: '2026-06-01T04:24:37.226017Z'
+  score:
+    feed_url: https://www.theguardian.com/rss
+    source_score: 92.0
+    feed_score: 100.0
+    total_score: 94.4
+    decision: accept_core_source
+    reasons:
+    - publisher_type=mainstream_media
+    - official=true
+    - parse_ok
+    - http_200
+    - recent_7d
+    - active_30d
+    - title_complete
+    - link_complete
+    - pub_dates
+    - low_duplicates
+    - summaries
+  source_score: 92.0
+  feed_score: 100.0
+  total_score: 94.4
+  decision: accept_core_source
+- id: null
+  publisher: The Guardian
+  feed_url: https://www.theguardian.com/news/rss
+  homepage: https://www.theguardian.com/international
+  discovered_from: common_path
+  official: true
+  publisher_type: mainstream_media
+  region: global
+  language: en
+  topics:
+  - world
+  - environment
+  - business
+  enabled: true
+  priority: medium_high
+  validation:
+    feed_url: https://www.theguardian.com/news/rss
+    status: active
+    http_status: 200
+    content_type: text/xml; charset=UTF-8
+    parse_ok: true
+    feed_title: The Guardian
+    entry_count: 137
+    last_published_at: '2026-06-01T04:08:42Z'
+    items_7d: 133
+    items_30d: 133
+    has_title_rate: 1.0
+    has_link_rate: 1.0
+    has_pub_date_rate: 1.0
+    duplicate_url_rate: 0.0
+    has_summary_rate: 1.0
+    has_full_content_rate: 0.0
+    checked_at: '2026-06-01T04:24:37.790728Z'
+  score:
+    feed_url: https://www.theguardian.com/news/rss
+    source_score: 92.0
+    feed_score: 100.0
+    total_score: 94.4
+    decision: accept_core_source
+    reasons:
+    - publisher_type=mainstream_media
+    - official=true
+    - parse_ok
+    - http_200
+    - recent_7d
+    - active_30d
+    - title_complete
+    - link_complete
+    - pub_dates
+    - low_duplicates
+    - summaries
+  source_score: 92.0
+  feed_score: 100.0
+  total_score: 94.4
+  decision: accept_core_source
+- id: null
+  publisher: The Guardian
+  feed_url: https://www.theguardian.com/world/rss
+  homepage: https://www.theguardian.com/international
+  discovered_from: common_path
+  official: true
+  publisher_type: mainstream_media
+  region: global
+  language: en
+  topics:
+  - world
+  - environment
+  - business
+  enabled: true
+  priority: medium_high
+  validation:
+    feed_url: https://www.theguardian.com/world/rss
+    status: active
+    http_status: 200
+    content_type: text/xml; charset=UTF-8
+    parse_ok: true
+    feed_title: World news | The Guardian
+    entry_count: 45
+    last_published_at: '2026-06-01T04:08:42Z'
+    items_7d: 45
+    items_30d: 45
+    has_title_rate: 1.0
+    has_link_rate: 1.0
+    has_pub_date_rate: 1.0
+    duplicate_url_rate: 0.0
+    has_summary_rate: 1.0
+    has_full_content_rate: 0.0
+    checked_at: '2026-06-01T04:24:38.683607Z'
+  score:
+    feed_url: https://www.theguardian.com/world/rss
+    source_score: 92.0
+    feed_score: 100.0
+    total_score: 94.4
+    decision: accept_core_source
+    reasons:
+    - publisher_type=mainstream_media
+    - official=true
+    - parse_ok
+    - http_200
+    - recent_7d
+    - active_30d
+    - title_complete
+    - link_complete
+    - pub_dates
+    - low_duplicates
+    - summaries
+  source_score: 92.0
+  feed_score: 100.0
+  total_score: 94.4
+  decision: accept_core_source

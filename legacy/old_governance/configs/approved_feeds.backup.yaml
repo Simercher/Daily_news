@@ -1,0 +1,35 @@
+feeds:
+  - id: bbc_world
+    publisher: BBC
+    feed_url: https://feeds.bbci.co.uk/news/world/rss.xml
+    homepage: https://www.bbc.com/news/world
+    publisher_type: public_broadcaster
+    region: global
+    language: en
+    topics: [world]
+    source_tier: A
+    official: true
+    discovered_from: manual_official
+    full_text_strategy: article_extraction
+    usage_note: check_terms
+    enabled: true
+    source_score: 92
+    feed_score: 86
+    total_score: 90.2
+  - id: guardian_world
+    publisher: The Guardian
+    feed_url: https://www.theguardian.com/world/rss
+    homepage: https://www.theguardian.com/world
+    publisher_type: mainstream_media
+    region: global
+    language: en
+    topics: [world]
+    source_tier: A
+    official: true
+    discovered_from: official_feed_page
+    full_text_strategy: rss_or_article_extraction
+    usage_note: personal_non_commercial
+    enabled: true
+    source_score: 88
+    feed_score: 84
+    total_score: 86.8

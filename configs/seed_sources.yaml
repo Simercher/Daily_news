@@ -1,0 +1,49 @@
+seed_sources:
+  - id: feeds_for_journalists_opml
+    name: feedsForJournalists OPML
+    type: opml
+    repository: https://github.com/scripting/feedsForJournalists
+    url: https://raw.githubusercontent.com/scripting/feedsForJournalists/master/list.opml
+    priority: high
+    topics: [news, journalism]
+
+  - id: feeds_for_journalists_text
+    name: feedsForJournalists text list
+    type: text
+    repository: https://github.com/scripting/feedsForJournalists
+    url: https://raw.githubusercontent.com/scripting/feedsForJournalists/master/list.txt
+    priority: high
+    topics: [news, journalism]
+
+  - id: awesome_rss_feeds_us
+    name: plenaryapp awesome-rss-feeds United States
+    type: opml
+    repository: https://github.com/plenaryapp/awesome-rss-feeds
+    url: https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/countries/with_category/United%20States.opml
+    priority: medium_high
+    topics: [news, country]
+
+  - id: awesome_rss_feeds_uk
+    name: plenaryapp awesome-rss-feeds United Kingdom
+    type: opml
+    repository: https://github.com/plenaryapp/awesome-rss-feeds
+    url: https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/countries/with_category/United%20Kingdom.opml
+    priority: medium_high
+    topics: [news, country]
+
+  - id: awesome_tech_rss
+    name: awesome-tech-rss
+    type: opml
+    repository: https://github.com/tuan3w/awesome-tech-rss
+    url: https://raw.githubusercontent.com/tuan3w/awesome-tech-rss/main/feeds.opml
+    priority: medium
+    topics: [technology, ai, startup, engineering]
+
+  - id: security_rss
+    name: SecurityRSS
+    type: github_page
+    repository: https://github.com/arch3rPro/SecurityRSS
+    url: https://github.com/arch3rPro/SecurityRSS
+    priority: medium
+    topics: [security]
+    notes: "Raw feed list path needs manual confirmation before enabling."

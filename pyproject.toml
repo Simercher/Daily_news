@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "news-feed-bootstrap"
+version = "0.1.0"
+description = "Agent-friendly RSS feed bootstrap, health check, OPML export, and raw news item collection pipeline."
+readme = "README_EN.md"
+requires-python = ">=3.11"
+dependencies = [
+  "beautifulsoup4>=4.12.0",
+  "defusedxml>=0.7.1",
+  "feedparser>=6.0.11",
+  "httpx>=0.27.0",
+  "lxml>=5.0.0",
+  "orjson>=3.10.0",
+  "pydantic>=2.7.0",
+  "python-dateutil>=2.9.0",
+  "pyyaml>=6.0.1",
+  "requests>=2.31.0",
+  "tqdm>=4.66.0",
+  "typer>=0.12.0",
+]
+
+[dependency-groups]
+dev = [
+  "mypy>=1.10.0",
+  "pytest>=8.0.0",
+  "pytest-mock>=3.14.0",
+  "ruff>=0.5.0",
+]
+
+[project.scripts]
+news-feed = "news_feed_bootstrap.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008"]
