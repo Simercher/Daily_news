@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import re
 import warnings
 import xml.etree.ElementTree as ET
+from html import unescape
 from urllib.parse import urlparse
 
 import requests
@@ -21,20 +23,44 @@ def _read_opml(path_or_url: str) -> str:
     return resolve_path(path_or_url).read_text(encoding="utf-8")
 
 
+def _outline_attrs_from_xml(xml: str) -> list[dict[str, str]]:
+    try:
+        root = SafeET.fromstring(xml)
+    except ET.ParseError:
+        return _outline_attrs_from_tolerant_regex(xml)
+    return [dict(outline.attrib) for outline in root.findall(".//outline")]
+
+
+def _outline_attrs_from_tolerant_regex(xml: str) -> list[dict[str, str]]:
+    outlines: list[dict[str, str]] = []
+    for match in re.finditer(r"<outline\b(?P<attrs>[^>]*)>", xml, flags=re.IGNORECASE):
+        attrs_text = match.group("attrs")
+        attrs = {
+            attr_match.group("key"): unescape(attr_match.group("value"))
+            for attr_match in re.finditer(
+                r"(?P<key>[A-Za-z_:][-A-Za-z0-9_:.]*)\s*=\s*(?P<quote>[\"'])(?P<value>.*?)(?P=quote)",
+                attrs_text,
+                flags=re.DOTALL,
+            )
+        }
+        if attrs:
+            outlines.append(attrs)
+    return outlines
+
+
 def import_opml(file_path_or_url: str) -> list[FeedCandidate]:
     xml = _read_opml(file_path_or_url)
-    root = SafeET.fromstring(xml)
     candidates: list[FeedCandidate] = []
-    for outline in root.findall(".//outline"):
-        feed_url = outline.attrib.get("xmlUrl") or outline.attrib.get("xmlurl")
+    for attrs in _outline_attrs_from_xml(xml):
+        feed_url = attrs.get("xmlUrl") or attrs.get("xmlurl")
         if not feed_url:
             continue
-        title = outline.attrib.get("title") or outline.attrib.get("text")
+        title = attrs.get("title") or attrs.get("text")
         candidates.append(
             FeedCandidate(
                 publisher=title,
                 feed_url=feed_url,
-                homepage=outline.attrib.get("htmlUrl"),
+                homepage=attrs.get("htmlUrl"),
                 discovered_from=file_path_or_url,
             )
         )
@@ -78,6 +104,8 @@ def import_seed_lists(config_path: str = "configs/seed_sources.yaml") -> list[Fe
     imported: list[FeedCandidate] = []
     for row in data.get("seed_sources", []):
         seed = SeedSource(**row)
+        if not seed.enabled:
+            continue
         if seed.type not in {"opml", "text"}:
             warnings.warn(
                 f"unsupported_seed_type: {seed.id}; raw OPML/text URL must be confirmed manually",

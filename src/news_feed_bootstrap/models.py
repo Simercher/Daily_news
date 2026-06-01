@@ -18,6 +18,7 @@ class SeedSource(PipelineModel):
     repository: str | None = None
     priority: Literal["high", "medium_high", "medium", "low"] = "medium"
     topics: list[str] = Field(default_factory=list)
+    enabled: bool = True
     notes: str | None = None
 
 
@@ -85,6 +86,7 @@ class NewsItem(PipelineModel):
     full_text: str | None = None
     content_level: Literal["summary_only", "partial", "full_text"]
     fetch_status: Literal["rss_only", "success", "paywall", "blocked", "parse_failed", "http_error", "skipped"]
+    collector: str = "local_feedparser"
     language: str | None = None
     topics: list[str] = Field(default_factory=list)
     importance_score: float | None = None

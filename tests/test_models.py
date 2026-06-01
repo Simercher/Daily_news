@@ -7,6 +7,12 @@ def test_seed_source_create() -> None:
     source = SeedSource(id="feeds", name="Feeds", type="opml", url="https://example.com/list.opml", priority="high")
     assert source.name == "Feeds"
     assert source.type == "opml"
+    assert source.enabled is True
+
+
+def test_seed_source_can_be_disabled() -> None:
+    source = SeedSource(id="feeds", name="Feeds", type="opml", url="https://example.com/list.opml", enabled=False)
+    assert source.enabled is False
 
 
 def test_active_feed_create() -> None:
@@ -26,3 +32,4 @@ def test_news_item_create() -> None:
     )
     assert item.title == "Title"
     assert item.topics == []
+    assert item.collector == "local_feedparser"

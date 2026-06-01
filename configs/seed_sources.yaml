@@ -2,6 +2,7 @@ seed_sources:
   - id: feeds_for_journalists_opml
     name: feedsForJournalists OPML
     type: opml
+    enabled: true
     repository: https://github.com/scripting/feedsForJournalists
     url: https://raw.githubusercontent.com/scripting/feedsForJournalists/master/list.opml
     priority: high
@@ -10,30 +11,37 @@ seed_sources:
   - id: feeds_for_journalists_text
     name: feedsForJournalists text list
     type: text
+    enabled: false
     repository: https://github.com/scripting/feedsForJournalists
     url: https://raw.githubusercontent.com/scripting/feedsForJournalists/master/list.txt
     priority: high
     topics: [news, journalism]
+    notes: "Fallback candidate only; mostly overlaps with the OPML list."
 
   - id: awesome_rss_feeds_us
     name: plenaryapp awesome-rss-feeds United States
     type: opml
+    enabled: true
     repository: https://github.com/plenaryapp/awesome-rss-feeds
     url: https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/countries/with_category/United%20States.opml
     priority: medium_high
-    topics: [news, country]
+    topics: [news, country, united_states]
+    notes: "OPML contains unescaped ampersands; importer needs tolerant fallback."
 
   - id: awesome_rss_feeds_uk
     name: plenaryapp awesome-rss-feeds United Kingdom
     type: opml
+    enabled: true
     repository: https://github.com/plenaryapp/awesome-rss-feeds
     url: https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/countries/with_category/United%20Kingdom.opml
     priority: medium_high
-    topics: [news, country]
+    topics: [news, country, united_kingdom]
+    notes: "OPML contains unescaped ampersands; importer needs tolerant fallback."
 
   - id: awesome_tech_rss
     name: awesome-tech-rss
     type: opml
+    enabled: true
     repository: https://github.com/tuan3w/awesome-tech-rss
     url: https://raw.githubusercontent.com/tuan3w/awesome-tech-rss/main/feeds.opml
     priority: medium
@@ -41,9 +49,30 @@ seed_sources:
 
   - id: security_rss
     name: SecurityRSS
-    type: github_page
+    type: opml
+    enabled: false
     repository: https://github.com/arch3rPro/SecurityRSS
-    url: https://github.com/arch3rPro/SecurityRSS
+    url: https://raw.githubusercontent.com/arch3rPro/SecurityRSS/master/SecurityRSS.opml
     priority: medium
-    topics: [security]
-    notes: "Raw feed list path needs manual confirmation before enabling."
+    topics: [security, cybersecurity]
+    notes: "Cybersecurity specialist source; keep disabled unless building a security section."
+
+  - id: awesome_ml_ai_rss_feed
+    name: awesome_ML_AI_RSS_feed
+    type: opml
+    enabled: false
+    repository: https://github.com/vishalshar/awesome_ML_AI_RSS_feed
+    url: https://raw.githubusercontent.com/vishalshar/awesome_ML_AI_RSS_feed/master/feed.opml
+    priority: medium
+    topics: [ai, machine_learning, data_science, research]
+    notes: "Specialist AI/ML source; repo default branch is master."
+
+  - id: awesome_news_cn_feeds
+    name: awesome-newsCN-feeds
+    type: opml
+    enabled: false
+    repository: https://github.com/RSS-Renaissance/awesome-newsCN-feeds
+    url: https://raw.githubusercontent.com/RSS-Renaissance/awesome-newsCN-feeds/master/feedlist.opml
+    priority: low
+    topics: [chinese_news]
+    notes: "Candidate only; may include third-party generated feeds, so keep disabled for the first MVP."
