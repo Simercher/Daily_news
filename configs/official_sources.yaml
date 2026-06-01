@@ -2,9 +2,11 @@
 # Unknown blogs, aggregators, community feeds, and vendor blogs should remain false until reviewed.
 official_domains:
   - abcnews.go.com
+  - about.fb.com
   - feeds.abcnews.com
   - aljazeera.com
   - apnews.com
+  - arstechnica.com
   - axios.com
   - bbc.co.uk
   - bbci.co.uk
@@ -23,6 +25,8 @@ official_domains:
   - euronews.com
   - fastcompany.com
   - federalreserve.gov
+  - feeds.arstechnica.com
+  - feeds.feedburner.com
   - feeds.foxnews.com
   - foxnews.com
   - ft.com
@@ -30,6 +34,7 @@ official_domains:
   - huffpost.com
   - independent.co.uk
   - imf.org
+  - ieee.org
   - latimes.com
   - marketwatch.com
   - nature.com

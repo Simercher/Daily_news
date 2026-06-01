@@ -35,6 +35,26 @@ class SeedSource(PipelineModel):
         "third_party_generated",
         "unknown",
     ] = "unknown"
+    source_tier: Literal["tier1", "tier2", "tier3", "unknown"] = "unknown"
+    source_role: Literal[
+        "first_party",
+        "official",
+        "major_media",
+        "specialist",
+        "aggregator",
+        "community",
+        "unknown",
+    ] = "unknown"
+    source_format: Literal[
+        "rss",
+        "atom",
+        "opml",
+        "html_feed_index",
+        "google_news_rss",
+        "text",
+        "generated_rss",
+        "unknown",
+    ] = "unknown"
     language: str | None = None
     region: str | None = None
     topics: list[str] = Field(default_factory=list)
@@ -57,6 +77,9 @@ class FeedCandidate(PipelineModel):
     topics: list[str] = Field(default_factory=list)
     priority: str | None = None
     trust_tier: str | None = None
+    source_tier: str | None = None
+    source_role: str | None = None
+    source_format: str | None = None
     dedupe_group: str | None = None
     commercial_use_risk: str | None = None
     collector: str = "local_feedparser"
@@ -93,6 +116,9 @@ class ActiveFeed(PipelineModel):
     topics: list[str] = Field(default_factory=list)
     priority: str | None = None
     trust_tier: str | None = None
+    source_tier: str | None = None
+    source_role: str | None = None
+    source_format: str | None = None
     dedupe_group: str | None = None
     commercial_use_risk: str | None = None
     collector: str = "local_feedparser"
@@ -124,6 +150,9 @@ class NewsItem(PipelineModel):
     language: str | None = None
     topics: list[str] = Field(default_factory=list)
     trust_tier: str | None = None
+    source_tier: str | None = None
+    source_role: str | None = None
+    source_format: str | None = None
     source_id: str | None = None
     dedupe_key: str | None = None
     confidence: Literal["high", "medium", "low"] = "medium"

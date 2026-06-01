@@ -136,6 +136,9 @@ seed_sources:
     notes: "Chinese-language candidate only; may include third-party generated feeds. Keep disabled for MVP."
 
   - id: bbc_news_opml
+    source_tier: tier1
+    source_role: major_media
+    source_format: opml
     name: BBC News RSS OPML
     type: opml
     enabled: true
@@ -153,6 +156,9 @@ seed_sources:
     notes: "Official BBC RSS OPML."
 
   - id: federal_reserve_rss_index
+    source_tier: tier1
+    source_role: official
+    source_format: html_feed_index
     name: Federal Reserve RSS Feeds
     type: html_feed_index
     enabled: true
@@ -170,6 +176,9 @@ seed_sources:
     notes: "Official Federal Reserve RSS index."
 
   - id: ecb_rss_index
+    source_tier: tier1
+    source_role: official
+    source_format: html_feed_index
     name: European Central Bank RSS Feeds
     type: html_feed_index
     enabled: true
@@ -187,6 +196,9 @@ seed_sources:
     notes: "Official ECB RSS index."
 
   - id: sec_press_releases_feed_discovery
+    source_tier: tier1
+    source_role: official
+    source_format: feed_discovery
     name: U.S. SEC Newsroom RSS Discovery
     type: feed_discovery
     enabled: true
@@ -204,6 +216,9 @@ seed_sources:
     notes: "Discover official SEC RSS/Atom feeds if available."
 
   - id: us_treasury_feed_discovery
+    source_tier: tier1
+    source_role: official
+    source_format: feed_discovery
     name: U.S. Treasury RSS Discovery
     type: feed_discovery
     enabled: true
@@ -221,6 +236,9 @@ seed_sources:
     notes: "Discover official Treasury RSS/Atom feeds if available."
 
   - id: imf_feed_discovery
+    source_tier: tier1
+    source_role: official
+    source_format: feed_discovery
     name: IMF RSS Discovery
     type: feed_discovery
     enabled: true
@@ -238,6 +256,9 @@ seed_sources:
     notes: "Discover official IMF RSS/Atom feeds if available."
 
   - id: un_news_rss
+    source_tier: tier1
+    source_role: official
+    source_format: rss
     name: UN News RSS
     type: rss
     enabled: true
@@ -255,6 +276,9 @@ seed_sources:
     notes: "Official UN News RSS feed."
 
   - id: nato_feed_discovery
+    source_tier: tier1
+    source_role: official
+    source_format: feed_discovery
     name: NATO News RSS Discovery
     type: feed_discovery
     enabled: true
@@ -272,6 +296,9 @@ seed_sources:
     notes: "Discover official NATO RSS/Atom feeds if available."
 
   - id: reuters_google_news_rss
+    source_tier: tier1
+    source_role: major_media
+    source_format: google_news_rss
     name: Reuters via Google News RSS
     type: google_news_rss
     enabled: true
@@ -288,24 +315,110 @@ seed_sources:
     commercial_use_risk: medium
     notes: "Fallback only. Prefer official Reuters feed if available in future."
 
-  - id: ap_google_news_rss
-    name: Associated Press via Google News RSS
-    type: google_news_rss
+  - id: ap_news_rss
+    source_tier: tier1
+    source_role: official
+    source_format: rss
+    name: AP News RSS
+    type: rss
     enabled: true
     repository: null
-    url: "https://news.google.com/rss/search?q=when:2d%20site:apnews.com&hl=en-US&gl=US&ceid=US:en"
+    url: https://apnews.com/index.rss
     priority: high
-    trust_tier: major_media
+    trust_tier: primary
     language: en
     region: global
-    topics: [news, international, united_states]
+    topics: [news, world, us, politics, official]
     dedupe_group: ap
     requires_tolerant_parser: false
     fetch_interval_minutes: 30
     commercial_use_risk: medium
-    notes: "Fallback only. Prefer official AP licensed feed if available in future."
+    notes: "Direct AP RSS feed discovered from AP site."
+
+  - id: arstechnica_rss_index
+    source_tier: tier2
+    source_role: specialist
+    source_format: html_feed_index
+    name: Ars Technica RSS Index
+    type: html_feed_index
+    enabled: true
+    repository: null
+    url: https://arstechnica.com/rss-feeds/
+    priority: medium_high
+    trust_tier: major_media
+    language: en
+    region: global
+    topics: [technology, science, gadgets, policy]
+    dedupe_group: arstechnica
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 60
+    commercial_use_risk: medium
+    notes: "Official Ars Technica RSS feed index."
+
+  - id: ieee_spectrum_rss
+    source_tier: tier2
+    source_role: specialist
+    source_format: rss
+    name: IEEE Spectrum RSS
+    type: rss
+    enabled: true
+    repository: null
+    url: https://spectrum.ieee.org/feeds/feed.rss
+    priority: medium_high
+    trust_tier: major_media
+    language: en
+    region: global
+    topics: [technology, engineering, science, ai]
+    dedupe_group: ieee_spectrum
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 60
+    commercial_use_risk: medium
+    notes: "IEEE Spectrum RSS feed discovered from the site."
+
+  - id: meta_news_rss
+    source_tier: tier1
+    source_role: official
+    source_format: rss
+    name: Meta News RSS
+    type: rss
+    enabled: true
+    repository: null
+    url: https://about.fb.com/feed/
+    priority: medium_high
+    trust_tier: primary
+    language: en
+    region: global
+    topics: [social_media, technology, company_news, official]
+    dedupe_group: meta
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 60
+    commercial_use_risk: low
+    notes: "Official Meta / Facebook Newsroom RSS feed."
+
+  - id: focus_taiwan_eng_news_rss
+    source_tier: tier2
+    source_role: major_media
+    source_format: rss
+    name: Focus Taiwan English News RSS
+    type: rss
+    enabled: true
+    repository: null
+    url: https://feeds.feedburner.com/rsscna/engnews/
+    priority: medium
+    trust_tier: major_media
+    language: en
+    region: taiwan
+    topics: [taiwan, asia, news]
+    dedupe_group: focus_taiwan
+    requires_tolerant_parser: false
+    fetch_interval_minutes: 60
+    commercial_use_risk: medium
+    notes: "Focus Taiwan / CNA English feed discovered from the site."
 
   - id: openai_feed_discovery
+    source_tier: tier1
+    source_role: official
+    source_format: feed_discovery
     name: OpenAI News Feed Discovery
     type: feed_discovery
     enabled: true
@@ -323,6 +436,9 @@ seed_sources:
     notes: "Official OpenAI news page. Use RSS/Atom only if discoverable."
 
   - id: anthropic_feed_discovery
+    source_tier: tier1
+    source_role: official
+    source_format: feed_discovery
     name: Anthropic News Feed Discovery
     type: feed_discovery
     enabled: true
@@ -340,6 +456,9 @@ seed_sources:
     notes: "Official Anthropic news page. Use RSS/Atom only if discoverable."
 
   - id: google_deepmind_feed_discovery
+    source_tier: tier1
+    source_role: official
+    source_format: feed_discovery
     name: Google DeepMind Blog Feed Discovery
     type: feed_discovery
     enabled: true
@@ -357,6 +476,9 @@ seed_sources:
     notes: "Official Google DeepMind blog. Use RSS/Atom only if discoverable."
 
   - id: nvidia_feed_discovery
+    source_tier: tier1
+    source_role: official
+    source_format: feed_discovery
     name: NVIDIA Blog Feed Discovery
     type: feed_discovery
     enabled: true

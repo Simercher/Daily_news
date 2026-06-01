@@ -16,6 +16,49 @@ from .models import FeedCandidate, SeedSource
 from .utils import TIMEOUT, USER_AGENT, write_json
 
 
+_SOURCE_TIER_BY_TRUST = {
+    "primary": "tier1",
+    "major_media": "tier1",
+    "specialist": "tier2",
+    "aggregator": "tier3",
+    "third_party_generated": "tier3",
+    "unknown": "unknown",
+}
+
+_SOURCE_ROLE_BY_TRUST = {
+    "primary": "official",
+    "major_media": "major_media",
+    "specialist": "specialist",
+    "aggregator": "aggregator",
+    "third_party_generated": "community",
+    "unknown": "unknown",
+}
+
+_SOURCE_FORMAT_BY_TYPE = {
+    "rss": "rss",
+    "google_news_rss": "google_news_rss",
+    "generated_rss": "generated_rss",
+    "opml": "opml",
+    "text": "text",
+    "html_feed_index": "html_feed_index",
+    "feed_discovery": "html_feed_index",
+    "github_page": "unknown",
+    "web_directory": "unknown",
+}
+
+
+def _source_tier_from_trust_tier(trust_tier: str | None) -> str:
+    return _SOURCE_TIER_BY_TRUST.get(trust_tier or "unknown", "unknown")
+
+
+def _source_role_from_trust_tier(trust_tier: str | None) -> str:
+    return _SOURCE_ROLE_BY_TRUST.get(trust_tier or "unknown", "unknown")
+
+
+def _source_format_from_seed_type(seed_type: str) -> str:
+    return _SOURCE_FORMAT_BY_TYPE.get(seed_type, "unknown")
+
+
 def _read_opml(path_or_url: str) -> str:
     if path_or_url.startswith(("http://", "https://")):
         response = requests.get(path_or_url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
@@ -171,6 +214,9 @@ def _apply_seed_metadata(candidate: FeedCandidate, seed: SeedSource) -> FeedCand
     candidate.source_name = seed.name
     candidate.priority = seed.priority
     candidate.trust_tier = seed.trust_tier
+    candidate.source_tier = seed.source_tier or _source_tier_from_trust_tier(seed.trust_tier)
+    candidate.source_role = seed.source_role or _source_role_from_trust_tier(seed.trust_tier)
+    candidate.source_format = seed.source_format or _source_format_from_seed_type(seed.type)
     candidate.language = candidate.language or seed.language
     candidate.region = candidate.region or seed.region
     candidate.dedupe_group = seed.dedupe_group
