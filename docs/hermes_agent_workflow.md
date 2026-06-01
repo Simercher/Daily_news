@@ -1,78 +1,83 @@
-# Hermes Agent Workflow
+# Hermes Agent Runbook
 
-Hermes should use the `scripts/agent_*.py` entrypoints. Their stdout is JSON-only, and logs are written to `data/logs/`.
+This file is the Hermes-specific execution runbook. For the general project overview, file map, JSON contract, and troubleshooting notes, read `docs/agent_handoff.md` first.
 
-## Standard Local Flow
+Hermes should use `scripts/agent_*.py`, not the human-oriented `news-feed` CLI. Agent script stdout is JSON-only. Logs are written to `data/logs/`.
 
-```text
-Step 1. uv sync
-Step 2. uv run python scripts/agent_bootstrap.py
-Step 3. uv run python scripts/agent_generate_mcp_config.py --server imprvhub_mcp_rss_aggregator
-Step 4. Start or confirm the RSS MCP server if MCP mode is needed
-Step 5. uv run python scripts/agent_fetch_latest.py --mode local --since-hours 24
-Step 6. uv run python scripts/agent_dedup.py
-Step 7. Read data/news_items_deduped.jsonl
-Step 8. Pass the items to the downstream model for classification, cross-source deduplication, summarization, and importance ranking
+## Default Local Run
+
+Run from the repository root:
+
+```bash
+uv sync
+uv run python scripts/agent_status.py
+uv run python scripts/agent_run_daily.py --mode local --since-hours 24
 ```
 
-The first version defaults to local mode. Local mode uses Python `feedparser` and does not require an MCP server.
+`agent_run_daily.py` is the preferred Hermes entrypoint for normal operation. It will bootstrap automatically when `data/active_feeds.json` or `data/active_feeds.opml` is missing or older than 24 hours.
 
-## Optional MCP Mode
+## Step-By-Step Run
+
+Use this when Hermes wants explicit checkpoints between stages:
+
+```bash
+uv run python scripts/agent_bootstrap.py
+uv run python scripts/agent_generate_mcp_config.py --server imprvhub_mcp_rss_aggregator
+uv run python scripts/agent_fetch_latest.py --mode local --since-hours 24
+uv run python scripts/agent_dedup.py
+```
+
+Final downstream input:
+
+```text
+data/news_items_deduped.jsonl
+```
+
+## Bootstrap Controls
+
+```bash
+uv run python scripts/agent_run_daily.py --mode local --since-hours 24 --force-bootstrap
+uv run python scripts/agent_run_daily.py --mode local --since-hours 24 --skip-bootstrap
+```
+
+Do not combine `--force-bootstrap` and `--skip-bootstrap`.
+
+## MCP Handoff
+
+MCP mode is not a full stdio client in this MVP. Hermes can still generate config hints:
+
+```bash
+uv run python scripts/agent_generate_mcp_config.py --server imprvhub_mcp_rss_aggregator
+```
+
+Output:
+
+```text
+data/logs/mcp_config_hint.json
+```
+
+If Hermes tries MCP fetch:
 
 ```bash
 uv run python scripts/agent_fetch_latest.py --mode mcp --server imprvhub_mcp_rss_aggregator --since-hours 24
 ```
 
-MCP mode is adapter-only in this MVP. The script writes `data/logs/mcp_config_hint.json`, returns a JSON error with exit code `3`, and includes a warning that local mode is available as fallback.
+Expected MVP behavior:
 
-## Daily Run
+- stdout JSON has `ok: false`
+- exit code is `3`
+- `data/logs/mcp_config_hint.json` is written
+- warning says local mode is available as fallback
+
+Fallback command:
 
 ```bash
-uv run python scripts/agent_run_daily.py --mode local --since-hours 24
+uv run python scripts/agent_fetch_latest.py --mode local --since-hours 24
 ```
 
-`agent_run_daily.py` bootstraps automatically when `data/active_feeds.json` or `data/active_feeds.opml` is missing or older than 24 hours.
+## Decision Rules
 
-Options:
-
-- `--force-bootstrap`: always rebuild imported and active feed files.
-- `--skip-bootstrap`: use existing active feed files.
-
-## JSON Contract
-
-Successful scripts return:
-
-```json
-{
-  "ok": true,
-  "command": "agent_status",
-  "message": "Project status collected.",
-  "outputs": {},
-  "stats": {},
-  "warnings": []
-}
-```
-
-Failures return:
-
-```json
-{
-  "ok": false,
-  "command": "agent_fetch_latest",
-  "message": "RSS fetch failed.",
-  "error": {
-    "type": "ExternalServiceError",
-    "detail": "MCP server is not reachable."
-  },
-  "outputs": {},
-  "stats": {},
-  "warnings": ["Fallback to local mode is available."]
-}
-```
-
-Exit codes:
-
-- `0`: success
-- `1`: recoverable error
-- `2`: configuration error
-- `3`: external service or MCP error
+- If stdout JSON has `ok: true`, Hermes may continue to the next step.
+- If `ok: false` and exit code is `2`, treat it as a configuration issue.
+- If `ok: false` and exit code is `3`, treat it as MCP or external-service failure and fallback to local mode when appropriate.
+- If counts are `0`, inspect JSON `warnings`; common cause is missing network access to `raw.githubusercontent.com` or RSS feed hosts.

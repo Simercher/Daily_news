@@ -1,124 +1,107 @@
 # news_feed_bootstrap
 
-`news_feed_bootstrap` 是一個輕量級的 RSS bootstrap 層，用來收集每日新聞來源。
+`news_feed_bootstrap` 是一個小型自動化專案，用來把整理好的 RSS / OPML 清單轉成乾淨的 feed 與新聞資料檔。
 
-MVP 流程如下：
+它定位在後續模型流程之前的資料收集層。這個專案負責匯入 RSS feeds、檢查 feed 是否可用、抓取近期 RSS items，並輸出 JSON / JSONL。它不做摘要、不做分類、不做重要性排序、不做事件聚類、不呼叫 LLM API、不做 Discord 發送、不使用 Playwright，也不繞過 paywall 或存取限制。
+
+## 如何理解這個專案
 
 ```text
-GitHub curated RSS/OPML lists
--> 匯入 feed_url 候選清單
+curated RSS/OPML lists
+-> imported feed candidates
 -> minimum health check
--> data/active_feeds.opml 與 data/active_feeds.json
--> 使用本地 feedparser 抓取，或交給外部 RSS MCP server
--> data/news_items_raw.jsonl
--> 後續模型負責去重、分類、重要性判斷與摘要
+-> active feeds JSON/OPML
+-> raw RSS item fetch
+-> deduped JSONL for downstream models
 ```
 
-本專案刻意不執行 LLM 呼叫、不做 Discord bot、不使用 Playwright、不從首頁 discovery feed、不做來源可信度評分、不繞過 paywall、login wall、Cloudflare 或 captcha。
+主要輸出：
+
+- `data/active_feeds.json`
+- `data/active_feeds.opml`
+- `data/news_items_raw.jsonl`
+- `data/news_items_deduped.jsonl`
 
 ## 安裝
 
+在 repo 根目錄使用 `uv`：
+
 ```bash
-cd /Users/linyuzhan/Documents/.data/daily_news
-export UV_CACHE_DIR=.uv-cache
-export UV_PYTHON_INSTALL_DIR=.uv-python
 uv sync
+```
+
+如果要跑開發工具與測試：
+
+```bash
 uv sync --dev
 ```
 
-快速檢查：
+## 人類使用的 CLI
+
+人類操作者可以使用 `news-feed` CLI：
 
 ```bash
 uv run news-feed --help
-uv run python -m news_feed_bootstrap.cli --help
-uv run python scripts/agent_run_daily.py --mode local --since-hours 24
-```
-
-## 設定 Seed Sources
-
-編輯 `configs/seed_sources.yaml`。
-
-Seed URL 盡量使用直接的 `raw.githubusercontent.com` OPML 或文字檔。GitHub pages 與 web directories 會先保留為註記，等 raw path 手動確認後再啟用。
-
-目前包含的 seeds：
-
-- `feedsForJournalists`：OPML 與文字清單，高優先級。
-- `plenaryapp/awesome-rss-feeds`：美國與英國 OPML 範例，中高優先級。
-- `awesome-tech-rss`：科技、AI、startup、engineering OPML，中優先級。
-- `SecurityRSS`：因 raw feed list path 尚未固定，目前列為需手動確認的來源。
-
-## Bootstrap Feeds
-
-```bash
 uv run news-feed bootstrap
-```
-
-這會把 seed sources 匯入 `data/imported_feeds.json`，執行 minimum health check，並輸出：
-
-- `data/feed_health.jsonl`
-- `data/active_feeds.json`
-- `data/active_feeds.opml`
-
-只有 active、可解析，且近期有更新的 feeds 會被寫入 active outputs。
-
-也可以分步執行：
-
-```bash
-uv run news-feed bootstrap-seeds
-uv run news-feed health-check
-```
-
-## Local Fetch Mode
-
-Local mode 不會啟動 MCP。它直接使用 `feedparser`，適合作為測試與 fallback 路徑：
-
-```bash
 uv run news-feed fetch --mode local --since-hours 24
 uv run news-feed dedup
+uv run news-feed run-all --mode local --since-hours 24
 ```
 
-輸出：
+`run-all` 會一次執行 bootstrap、local fetch 與 deduplication。
 
-- `data/news_items_raw.jsonl`
+## Agent 入口
 
-這份輸出是原始 RSS item data。後續模型階段應負責分類、重要性判斷、事件聚類與摘要。
-
-## MCP Mode
-
-第一版提供 MCP adapter abstraction，並輸出 `data/active_feeds.opml` 給外部 RSS MCP servers 使用。
-
-```bash
-uv run news-feed mcp-notes
-```
-
-候選 MCP servers：
-
-- `rss-reader-mcp`：RSS aggregation 與 article content extraction。
-- `buhe/mcp_rss`：OPML import 與長期儲存；需要 MySQL。
-- `imprvhub/mcp-rss-aggregator`：OPML import、category filtering、latest articles。
-- `veithly/rss-mcp`：通用 RSS/Atom parser 與 RSSHub-compatible feeds。
-
-stdio MCP client 會等目標 RSS MCP server 選定後再實作，目前刻意保留為 TODO。
-
-## Hermes Agent 使用方式
-
-Hermes agent 應使用 `scripts/agent_*.py`。人類操作者可以使用 `news-feed` CLI。
-
-Agent stdout 只會輸出 JSON。Logs 會寫入 `data/logs/`。
+自動化 agent 應使用 `scripts/` 裡的 scripts。這些 scripts 的 stdout 只會輸出 JSON，logs 會寫到 `data/logs/`。
 
 ```bash
 uv run python scripts/agent_status.py
 uv run python scripts/agent_bootstrap.py
-uv run python scripts/agent_generate_mcp_config.py --server imprvhub_mcp_rss_aggregator
-uv run python scripts/agent_fetch_latest.py --mode local --since-hours 24
-uv run python scripts/agent_dedup.py
 uv run python scripts/agent_run_daily.py --mode local --since-hours 24
 ```
 
-Daily run 會在 `data/active_feeds.json` 或 `data/active_feeds.opml` 不存在，或超過 24 小時未更新時自動 bootstrap。
+完整 agent 交接說明請看 `docs/agent_handoff.md`。
 
-標準 Hermes workflow 與 JSON contract 請見 `docs/hermes_agent_workflow.md`。
+## Seed Sources
+
+Feed 來源設定在：
+
+```text
+configs/seed_sources.yaml
+```
+
+Seed URL 盡量使用直接的 OPML 或文字檔。GitHub pages 與 web directories 會先保留為註記，等 raw path 確認後再啟用。
+
+目前包含的 seed families：
+
+- `feedsForJournalists`
+- `plenaryapp/awesome-rss-feeds`
+- `awesome-tech-rss`
+- `SecurityRSS`，目前列為需手動確認的來源
+
+## MCP Handoff
+
+這個 MVP 會替外部 RSS MCP servers 準備橋接檔：
+
+```bash
+uv run news-feed mcp-config --server imprvhub_mcp_rss_aggregator
+```
+
+產生的設定提示會寫到：
+
+```text
+data/logs/mcp_config_hint.json
+```
+
+MCP fetch 在這個 MVP 中只做到 adapter / handoff 階段。預設可運作路徑是 local mode。
+
+## 測試
+
+```bash
+uv run pytest
+uv run ruff check src scripts tests
+```
 
 ## Legacy
 
-舊版 source governance workflow 已移到 `legacy/old_governance/`。其中包含先前的 homepage discovery、`source_score` / `feed_score`、`approved_feeds.yaml`、article extraction 與相關 tests。這些內容只作為參考保留，不屬於 MVP CLI 主流程。
+舊版 source governance workflow 保留在 `legacy/old_governance/` 作為參考。它不屬於 MVP runtime path。
