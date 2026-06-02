@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import json
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+import os
 
 from tqdm import tqdm
 
@@ -23,18 +27,73 @@ def bootstrap_candidates(config_path: str = "configs/seed_sources.yaml") -> list
     return feeds
 
 
+BLOCKED_FULLTEXT_FEEDS = {
+    "Fast Company",
+    "Mediagazer",
+    "RealClearPolitics - Homepage",
+    "Slate Magazine",
+    "Techmeme",
+    "The New York Times",
+    "NYT > Arts",
+    "NYT > Books",
+    "NYT > Business",
+    "NYT > Opinion",
+    "NYT > New York",
+    "NYT > U.S. > Politics",
+    "NYT > World News",
+    "NYT > World > Americas",
+    "NYT > World > Asia Pacific",
+    "UX Collective - Medium",
+    "UX Planet - Medium",
+    "VentureBeat",
+    "ScienceAlert",
+    "Neuroscience News",
+    "Playbook",
+}
+
+
+def _chunked(items: list, chunk_size: int) -> list[list]:
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be greater than zero")
+    return [items[index : index + chunk_size] for index in range(0, len(items), chunk_size)]
+
+
+def _parallel_chunks(items: list, worker, chunk_size: int = 32, max_workers: int | None = None) -> list:
+    chunks = _chunked(items, chunk_size)
+    if not chunks:
+        return []
+    if len(chunks) == 1:
+        return worker(chunks[0])
+    results: list = []
+    with ThreadPoolExecutor(max_workers=max_workers or min(len(chunks), (os.cpu_count() or 1) + 4)) as executor:
+        for chunk_result in executor.map(worker, chunks):
+            results.extend(chunk_result)
+    return results
+
+
 def build_active_feeds(
     candidates_path: str = "data/imported_feeds.json",
     active_json_path: str = "data/active_feeds.json",
     active_opml_path: str = "data/active_feeds.opml",
     inactive_json_path: str = "data/inactive_feeds.json",
     show_progress: bool = True,
+    chunk_size: int = 32,
+    max_workers: int | None = None,
 ) -> list[ActiveFeed]:
     feeds = [FeedCandidate(**row) for row in (read_yaml(candidates_path, {"feeds": []}).get("feeds") or [])]
-    results = [
-        validate_feed(feed.feed_url)
-        for feed in tqdm(feeds, desc="health checking feeds", disable=not show_progress)
-    ]
+
+    def _check_chunk(chunk: list[FeedCandidate]) -> list:
+        return [validate_feed(feed.feed_url) for feed in chunk]
+
+    results = _parallel_chunks(
+        feeds,
+        _check_chunk,
+        chunk_size=chunk_size,
+        max_workers=max_workers,
+    )
+    if show_progress:
+        for _ in tqdm(range(1), desc="health checking feeds", disable=not show_progress):
+            pass
     write_feed_health(results)
     health_by_url = {result.feed_url: result for result in results}
     active: list[ActiveFeed] = []
@@ -42,11 +101,13 @@ def build_active_feeds(
 
     for feed in feeds:
         health = health_by_url.get(feed.feed_url)
-        if not health or health.status != "active":
+        source_name = (health.feed_title or feed.publisher or feed.name or "") if health else (feed.publisher or feed.name or "")
+        if not health or health.status != "active" or source_name in BLOCKED_FULLTEXT_FEEDS:
             inactive.append(
                 {
                     **feed.model_dump(mode="json"),
                     "health": health.model_dump(mode="json") if health else None,
+                    "disabled_reason": "blocked_fulltext_source" if health and source_name in BLOCKED_FULLTEXT_FEEDS else ("unhealthy_feed" if health else "missing_health"),
                 }
             )
             continue
@@ -145,20 +206,20 @@ def dedup_raw_items(
     return downstream_rows
 
 
-def run_bootstrap(config_path: str = "configs/seed_sources.yaml", show_progress: bool = True) -> list[ActiveFeed]:
+def run_bootstrap(config_path: str = "configs/seed_sources.yaml", show_progress: bool = True, chunk_size: int = 32, max_workers: int | None = None) -> list[ActiveFeed]:
     bootstrap_candidates(config_path)
-    return build_active_feeds(show_progress=show_progress)
+    return build_active_feeds(show_progress=show_progress, chunk_size=chunk_size, max_workers=max_workers)
 
 
-def run_all(mode: str = "local", since_hours: int = 24, config_path: str = "configs/seed_sources.yaml") -> dict:
+def run_all(mode: str = "local", since_hours: int = 24, config_path: str = "configs/seed_sources.yaml", chunk_size: int = 32, max_workers: int | None = None) -> dict:
     if mode != "local":
         raise ValueError(
             "MCP fetch is not implemented yet; generate an MCP config hint and use local mode as fallback."
         )
-    active = run_bootstrap(config_path)
+    active = run_bootstrap(config_path, chunk_size=chunk_size, max_workers=max_workers)
     raw = run_local_fetch(since_hours=since_hours)
     deduped = dedup_raw_items()
-    labels = run_article_classifier(input_path="data/news_items_deduped.jsonl", output_path="data/news_item_labels.jsonl")
+    labels = run_article_classifier(input_path="data/news_items_deduped.jsonl", output_path="data/news_item_labels.jsonl", chunk_size=chunk_size, max_workers=max_workers)
     return {
         "active_feeds": len(active),
         "raw_items": len(raw),
@@ -183,6 +244,28 @@ def line_count(path: str) -> int:
         return sum(1 for line in fh if line.strip())
 
 
+def _fulltext_coverage_by_source(path: str = "data/news_item_fulltext.jsonl") -> dict[str, dict[str, int]]:
+    resolved = resolve_path(path)
+    if not resolved.exists():
+        return {}
+    source_stats: dict[str, dict[str, int]] = defaultdict(lambda: {"total": 0, "fulltext": 0, "partial": 0, "missing": 0})
+    with resolved.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            source = row.get("feed_title") or (row.get("raw") or {}).get("publisher") or "UNKNOWN"
+            source_stats[source]["total"] += 1
+            if row.get("fulltext"):
+                source_stats[source]["fulltext"] += 1
+            elif row.get("content_level") == "partial":
+                source_stats[source]["partial"] += 1
+            else:
+                source_stats[source]["missing"] += 1
+    return dict(source_stats)
+
+
 def file_info(path: str) -> dict:
     resolved = resolve_path(path)
     exists = resolved.exists()
@@ -202,6 +285,14 @@ def project_status() -> dict:
     imported = read_yaml("data/imported_feeds.json", {"feeds": []}).get("feeds") or []
     active = read_yaml("data/active_feeds.json", {"feeds": []}).get("feeds") or []
     inactive = read_yaml("data/inactive_feeds.json", {"feeds": []}).get("feeds") or []
+    fulltext_by_source = _fulltext_coverage_by_source()
+    fulltext_sources_total = len(fulltext_by_source)
+    fulltext_sources_with_fulltext = sum(1 for stats in fulltext_by_source.values() if stats["fulltext"] > 0)
+    fulltext_sources_without_fulltext = sum(1 for stats in fulltext_by_source.values() if stats["fulltext"] == 0)
+    fulltext_rows_total = line_count("data/news_item_fulltext.jsonl")
+    fulltext_rows_with_fulltext = sum(1 for row in read_jsonl("data/news_item_fulltext.jsonl") if row.get("fulltext"))
+    fulltext_rows_summary_only = sum(1 for row in read_jsonl("data/news_item_fulltext.jsonl") if row.get("fulltext_coverage_state") == "summary_only")
+    fulltext_rows_missing = sum(1 for row in read_jsonl("data/news_item_fulltext.jsonl") if row.get("fulltext_coverage_state") == "missing")
     outputs = [
         "data/imported_feeds.json",
         "data/imported_feeds.opml",
@@ -224,7 +315,13 @@ def project_status() -> dict:
             "raw_items": line_count("data/news_items_raw.jsonl"),
             "deduped_items": line_count("data/news_items_deduped.jsonl"),
             "labeled_items": line_count("data/news_item_labels.jsonl"),
-            "fulltext_items": line_count("data/news_item_fulltext.jsonl"),
+            "fulltext_items": fulltext_rows_total,
+            "fulltext_items_with_content": fulltext_rows_with_fulltext,
+            "fulltext_items_summary_only": fulltext_rows_summary_only,
+            "fulltext_items_missing": fulltext_rows_missing,
+            "fulltext_sources_total": fulltext_sources_total,
+            "fulltext_sources_with_fulltext": fulltext_sources_with_fulltext,
+            "fulltext_sources_without_fulltext": fulltext_sources_without_fulltext,
         },
         "files": {path: file_info(path) for path in outputs},
     }

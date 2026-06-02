@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from itertools import combinations
 from typing import Iterable
+import os
 
 from .utils import read_jsonl, write_jsonl
 
@@ -306,6 +308,7 @@ def classify_item(item: dict) -> ClassificationResult:
     same_event_cluster_rank = item.get("title_cluster_rank") or item.get("same_event_cluster_rank")
     same_event_cluster_size = item.get("title_cluster_size") or item.get("same_event_cluster_size")
     fetch_priority = round(min(1.0, 0.45 + confidence * 0.45 + (0.1 if needs_human_review else 0.0)), 2)
+    skip_fulltext = False
     row = {
         "schema_version": "news_item_enriched.v1",
         "article_id": item["id"],
@@ -338,20 +341,45 @@ def classify_item(item: dict) -> ClassificationResult:
         "geography": _geography(text),
         "confidence": round(confidence, 2),
         "needs_human_review": needs_human_review,
-        "fetch_required": True,
-        "fetch_priority": fetch_priority,
+        "fetch_required": not skip_fulltext,
+        "fetch_priority": 0.0 if skip_fulltext else fetch_priority,
         "fetch_hints": {
-            "prefer_fulltext": True,
+            "prefer_fulltext": not skip_fulltext,
             "prefer_primary_source": bool(item.get("official_source", False)),
             "cluster_primary": bool(item.get("title_cluster_is_primary", False)),
+            "skip_reason": "blocked_source" if skip_fulltext else None,
         },
-        "reason": f"Heuristic classifier matched keywords for {primary_domain}.",
+        "reason": (
+            f"Skipping fulltext for blocked source {item.get('feed_title')}."
+            if skip_fulltext
+            else f"Heuristic classifier matched keywords for {primary_domain}."
+        ),
     }
     return ClassificationResult(row=row)
 
 
-def classify_articles(items: Iterable[dict]) -> list[dict]:
-    return [classify_item(item).row for item in items]
+def _chunked(items: list[dict], chunk_size: int) -> list[list[dict]]:
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be greater than zero")
+    return [items[index : index + chunk_size] for index in range(0, len(items), chunk_size)]
+
+
+def _parallel_classify(items: list[dict], chunk_size: int, max_workers: int | None) -> list[dict]:
+    chunks = _chunked(items, chunk_size)
+    if not chunks:
+        return []
+    if len(chunks) == 1:
+        return [classify_item(item).row for item in chunks[0]]
+    results: list[dict] = []
+    with ThreadPoolExecutor(max_workers=max_workers or min(len(chunks), (os.cpu_count() or 1) + 4)) as executor:
+        for chunk in executor.map(lambda chunk: [classify_item(item).row for item in chunk], chunks):
+            results.extend(chunk)
+    return results
+
+
+def classify_articles(items: Iterable[dict], chunk_size: int = 32, max_workers: int | None = None) -> list[dict]:
+    items_list = list(items)
+    return _parallel_classify(items_list, chunk_size, max_workers)
 
 
 def _merge_manifest_row(item: dict, label: dict) -> dict:
@@ -369,10 +397,15 @@ def run_article_classifier(
     input_path: str = "data/news_items_deduped.jsonl",
     output_path: str = "data/news_item_labels.jsonl",
     cluster_threshold: float = 0.86,
+    chunk_size: int = 32,
+    max_workers: int | None = None,
 ) -> list[dict]:
     items = read_jsonl(input_path)
     clustered_items = cluster_title_similar_items(items, threshold=cluster_threshold)
-    labels = classify_articles(clustered_items)
+    try:
+        labels = classify_articles(clustered_items, chunk_size=chunk_size, max_workers=max_workers)
+    except TypeError:
+        labels = classify_articles(clustered_items)
     merged = [_merge_manifest_row(item, label) for item, label in zip(clustered_items, labels)]
     write_jsonl(output_path, merged)
     return merged

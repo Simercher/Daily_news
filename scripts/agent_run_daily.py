@@ -11,6 +11,7 @@ from news_feed_bootstrap.agent_io import (
     print_agent_success,
 )
 from news_feed_bootstrap.mcp_config_generator import generate_mcp_config_hint
+from news_feed_bootstrap.fulltext_fetcher import run_fulltext_fetch
 from news_feed_bootstrap.pipeline import dedup_raw_items, path_is_stale, project_status, run_bootstrap, run_local_fetch
 
 COMMAND = "agent_run_daily"
@@ -23,6 +24,8 @@ def main() -> None:
     parser.add_argument("--since-hours", type=int, default=24)
     parser.add_argument("--force-bootstrap", action="store_true")
     parser.add_argument("--skip-bootstrap", action="store_true")
+    parser.add_argument("--chunk-size", type=int, default=32)
+    parser.add_argument("--max-workers", type=int, default=None)
     args = parser.parse_args()
 
     configure_agent_logging(COMMAND)
@@ -47,7 +50,7 @@ def main() -> None:
             and (path_is_stale("data/active_feeds.json") or path_is_stale("data/active_feeds.opml"))
         )
         if should_bootstrap:
-            active = run_bootstrap(show_progress=False)
+            active = run_bootstrap(show_progress=False, chunk_size=args.chunk_size, max_workers=args.max_workers)
             if not active:
                 warnings.append(
                     "Bootstrap produced zero active feeds. Check seed source network access or feed health."
@@ -59,12 +62,14 @@ def main() -> None:
         deduped = dedup_raw_items()
         from news_feed_bootstrap.classifier import run_article_classifier
 
-        labels = run_article_classifier(input_path="data/news_items_deduped.jsonl")
+        labels = run_article_classifier(input_path="data/news_items_deduped.jsonl", chunk_size=args.chunk_size, max_workers=args.max_workers)
+        fulltext = run_fulltext_fetch(input_path="data/news_item_labels.jsonl", chunk_size=args.chunk_size, max_workers=args.max_workers)
         status = project_status()
         stats = status["stats"] | {
             "raw_items": len(raw),
             "deduped_items": len(deduped),
             "labeled_items": len(labels),
+            "fulltext_items": len(fulltext),
         }
         print_agent_success(COMMAND, "Daily RSS pipeline completed.", output_paths(), stats, warnings)
     except SystemExit:
