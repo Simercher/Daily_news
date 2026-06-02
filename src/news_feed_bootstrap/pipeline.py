@@ -27,31 +27,6 @@ def bootstrap_candidates(config_path: str = "configs/seed_sources.yaml") -> list
     return feeds
 
 
-BLOCKED_FULLTEXT_FEEDS = {
-    "Fast Company",
-    "Mediagazer",
-    "RealClearPolitics - Homepage",
-    "Slate Magazine",
-    "Techmeme",
-    "The New York Times",
-    "NYT > Arts",
-    "NYT > Books",
-    "NYT > Business",
-    "NYT > Opinion",
-    "NYT > New York",
-    "NYT > U.S. > Politics",
-    "NYT > World News",
-    "NYT > World > Americas",
-    "NYT > World > Asia Pacific",
-    "UX Collective - Medium",
-    "UX Planet - Medium",
-    "VentureBeat",
-    "ScienceAlert",
-    "Neuroscience News",
-    "Playbook",
-}
-
-
 def _chunked(items: list, chunk_size: int) -> list[list]:
     if chunk_size <= 0:
         raise ValueError("chunk_size must be greater than zero")
@@ -101,13 +76,12 @@ def build_active_feeds(
 
     for feed in feeds:
         health = health_by_url.get(feed.feed_url)
-        source_name = (health.feed_title or feed.publisher or feed.name or "") if health else (feed.publisher or feed.name or "")
-        if not health or health.status != "active" or source_name in BLOCKED_FULLTEXT_FEEDS:
+        if not health or health.status != "active":
             inactive.append(
                 {
                     **feed.model_dump(mode="json"),
                     "health": health.model_dump(mode="json") if health else None,
-                    "disabled_reason": "blocked_fulltext_source" if health and source_name in BLOCKED_FULLTEXT_FEEDS else ("unhealthy_feed" if health else "missing_health"),
+                    "disabled_reason": "unhealthy_feed" if health else "missing_health",
                 }
             )
             continue

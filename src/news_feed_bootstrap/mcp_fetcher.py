@@ -5,6 +5,7 @@ import logging
 import re
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -72,7 +73,23 @@ def _looks_like_paywall(html: str) -> bool:
     return any(marker in sample for marker in PAYWALL_MARKERS)
 
 
-def _extract_markdown_from_html(html: str) -> dict[str, Any]:
+def _extract_text_from_selector(soup: BeautifulSoup, selector: str) -> str:
+    root = soup.select_one(selector)
+    if root is None:
+        return ""
+    blocks: list[str] = []
+    for node in root.find_all(["p", "h1", "h2", "h3", "h4", "li", "blockquote", "pre"], recursive=True):
+        text = node.get_text(" ", strip=True)
+        if text:
+            blocks.append(text)
+    if not blocks:
+        text = root.get_text(" ", strip=True)
+        if text:
+            blocks = [text]
+    return "\n\n".join(blocks).strip()
+
+
+def _extract_markdown_from_html(html: str, url: str | None = None) -> dict[str, Any]:
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style", "nav", "header", "footer", "aside"]):
         tag.decompose()
@@ -82,6 +99,18 @@ def _extract_markdown_from_html(html: str) -> dict[str, Any]:
         title = soup.title.text.strip()
     elif soup.h1 and soup.h1.text.strip():
         title = soup.h1.text.strip()
+
+    host = urlparse(url).netloc.lower() if url else ""
+    content = ""
+
+    if "bbc.com" in host or host.endswith("bbc.co.uk"):
+        content = _extract_text_from_selector(soup, 'div[data-component="text-block"]')
+    elif "independent.co.uk" in host:
+        content = _extract_text_from_selector(soup, 'div.sc-14x1gfp-0.fCHrkm.sc-14x1gfp-1')
+    elif "qz.com" in host:
+        content = _extract_text_from_selector(soup, 'div.payload-richtext')
+    elif "cnbc.com" in host:
+        content = _extract_text_from_selector(soup, 'div.ArticleBody-articleBody')
 
     candidates = [
         soup.find("article"),
@@ -94,16 +123,17 @@ def _extract_markdown_from_html(html: str) -> dict[str, Any]:
         paragraphs = soup.find_all("p")
         content_root = max((p.parent for p in paragraphs if p.parent), key=lambda el: len(el.get_text(" ", strip=True)), default=soup.body or soup)
 
-    blocks: list[str] = []
-    for node in content_root.find_all(["p", "h1", "h2", "h3", "h4", "li", "blockquote", "pre"], recursive=True):
-        text = node.get_text(" ", strip=True)
-        if text:
-            blocks.append(text)
-    if not blocks:
-        text = content_root.get_text(" ", strip=True)
-        blocks = [text] if text else []
+    if not content:
+        blocks: list[str] = []
+        for node in content_root.find_all(["p", "h1", "h2", "h3", "h4", "li", "blockquote", "pre"], recursive=True):
+            text = node.get_text(" ", strip=True)
+            if text:
+                blocks.append(text)
+        if not blocks:
+            text = content_root.get_text(" ", strip=True)
+            blocks = [text] if text else []
+        content = "\n\n".join(blocks).strip()
 
-    content = "\n\n".join(blocks).strip()
     return {"title": title, "content": content}
 
 
@@ -118,7 +148,7 @@ def fetch_article_content(url: str, client: _HTTPArticleClient | None = None) ->
     html = response.text
     if _looks_like_paywall(html):
         raise MCPTransportError("paywall detected")
-    extracted = _extract_markdown_from_html(html)
+    extracted = _extract_markdown_from_html(html, url)
     extracted.update({"url": url, "extractedAt": ""})
     return {"fulltext": extracted.get("content", ""), "title": extracted.get("title", "Untitled Article"), "url": url, "extractedAt": ""}
 

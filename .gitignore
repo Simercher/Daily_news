@@ -18,4 +18,6 @@ data/logs/*
 !data/logs/.gitkeep
 external/
 docs/change_log_*.md
-docs/roadmap_*.md
+docs/spec*.md
+docs/todo.md
+

@@ -15,7 +15,6 @@ from .dedup import normalize_url
 from .models import FeedCandidate, SeedSource
 from .utils import TIMEOUT, USER_AGENT, write_json
 
-
 _SOURCE_TIER_BY_TRUST = {
     "primary": "tier1",
     "major_media": "tier1",
@@ -257,7 +256,7 @@ def import_seed_lists(config_path: str = "configs/seed_sources.yaml") -> list[Fe
                 candidates = []
             for candidate in candidates:
                 _apply_seed_metadata(candidate, seed)
-            imported.extend(candidates)
+                imported.append(candidate)
         except Exception as exc:  # noqa: BLE001 - keep batch import moving.
             warnings.warn(f"failed_seed_import: {seed.id}: {exc}", stacklevel=2)
     return merge_discovered(imported)

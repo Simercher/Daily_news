@@ -11,14 +11,16 @@
 1. 從 `configs/seed_sources.yaml` 匯入 curated RSS / OPML seed lists。
 2. 用 `enabled: false` 在 config 裡保留未來候選 source。
 3. 解析正常 OPML；如果 OPML 有未 escape 的 `&` 等 XML 問題，會 fallback 到 tolerant outline attribute extraction。
-4. 做最低限度 RSS feed health check。
-5. 匯出 active feeds 的 JSON 與 OPML。
-6. 使用 local `feedparser` 抓取近期 RSS items。
-7. 用 normalized exact URL 做 deduplication。
-8. 保留 `collector` 欄位，讓下游知道 item 來自 local feedparser，或未來的 MCP collector。
-9. 用保守 allowlist 標記 `official_source`，方便下游做 cross-source verification。
-10. 產生 RSS MCP config hint file，供未來或外部 MCP handoff 使用。
-11. 提供 agent-friendly scripts，stdout 最後會輸出一個 JSON object。
+4. 匯入外部 source packs，先合併成 normalized seed_sources-style 結構，再寫回 `configs/seed_sources.yaml`。
+5. source pack import 會依 `feed_url -> homepage -> publisher -> source_name` 的優先序去重。
+6. 做最低限度 RSS feed health check。
+7. 匯出 active feeds 的 JSON 與 OPML。
+8. 使用 local `feedparser` 抓取近期 RSS items。
+9. 用 normalized exact URL 做 deduplication。
+10. 保留 `collector` 欄位，讓下游知道 item 來自 local feedparser，或未來的 MCP collector。
+11. 用保守 allowlist 標記 `official_source`, 方便下游做 cross-source verification。
+12. 產生 RSS MCP config hint file，供未來或外部 MCP handoff 使用。
+13. 提供 agent-friendly scripts，stdout 最後會輸出一個 JSON object。
 
 ## 目前不做的事
 
@@ -53,6 +55,7 @@ configs/seed_sources.yaml
 
 ### 主要輸出
 
+- `configs/seed_sources.yaml`
 - `data/active_feeds.json`
 - `data/active_feeds.opml`
 - `data/news_items_raw.jsonl`
@@ -147,6 +150,23 @@ configs/seed_sources.yaml
 - `awesome-newsCN-feeds`，中文第三方或 generated feeds 需要額外檢查
 
 `enabled: false` 的來源會保留在設定檔中，但不會被 bootstrap 匯入。
+
+### 外部 source packs
+
+如果你拿到外部 source pack（例如另一份 `seed_sources.yaml` / `sources.yaml`），可用下列 script 先合併、去重，再寫回主設定：
+
+```bash
+uv run python scripts/agent_import_source_packs.py path/to/pack-a.yaml path/to/pack-b.yaml
+```
+
+去重規則：
+
+- 先比對 `feed_url`
+- 若沒有 `feed_url`，再比對 `homepage`
+- 再比對 `publisher`
+- 最後才比對 `source_name`
+
+相同 key 的條目會被視為同一個 seed；合併時保留既有設定檔的單一 enable/disable 控制，並將 `topics` 做 union。
 
 ## Official Source Marker
 

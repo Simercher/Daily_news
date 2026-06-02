@@ -2,41 +2,10 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-import feedparser
-import requests
-
 from .config import read_yaml
-from .dedup import compute_item_id, normalize_url
-from .mcp_fetcher import mcp_server_ready
-from .models import NewsItem
-from .source_classification import is_official_source
-from .utils import TIMEOUT, USER_AGENT, parse_datetime, utc_now, write_jsonl
-
-
-def _entry_content(entry: dict) -> str | None:
-    if entry.get("content"):
-        parts = [part.get("value", "") for part in entry.get("content", []) if isinstance(part, dict)]
-        return "\n".join(part for part in parts if part) or None
-    return entry.get("content:encoded")
-
-
-def _entry_url(entry: dict, fallback_url: str) -> str:
-    if entry.get("feedburner_origlink"):
-        return entry["feedburner_origlink"]
-    if entry.get("links"):
-        for link in entry.get("links", []):
-            if isinstance(link, dict) and link.get("rel") == "alternate" and link.get("href"):
-                return link["href"]
-    return entry.get("link") or entry.get("id") or fallback_url
-
-
-def _content_level(summary: str | None, content: str | None) -> str:
-    text = content or summary or ""
-    if len(text) >= 1500:
-        return "full_text"
-    if len(text) >= 500:
-        return "partial"
-    return "summary_only"
+from .models import ActiveFeed, NewsItem
+from .source_adapters import DEFAULT_SOURCE_RETRY_LIMIT, adapter_for
+from .utils import utc_now, write_json, write_jsonl
 
 
 def fetch_feed_items(
@@ -48,65 +17,36 @@ def fetch_feed_items(
     fetched_at = utc_now()
     cutoff = fetched_at - timedelta(hours=since_hours)
     items: list[NewsItem] = []
-    use_mcp = mcp_server_ready()
-    if use_mcp:
-        # MCP-first path: if the configured MCP server is present we can hand off
-        # upstream collection here later. This MVP keeps the repository runnable
-        # by retaining the local fetch implementation below as a fallback.
-        pass
-    for feed in config.get("feeds", []):
-        try:
-            response = requests.get(feed["feed_url"], headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
-            response.raise_for_status()
-        except requests.RequestException:
-            continue
-        parsed = feedparser.parse(response.content)
-        for entry in parsed.entries:
-            parsed_published_at = parse_datetime(entry.get("published") or entry.get("updated"))
-            published_at_fallback = parsed_published_at is None
-            published_at = parsed_published_at or fetched_at
-            effective_time = published_at
-            if effective_time < cutoff:
+    updated_feeds: list[dict] = []
+
+    for feed_row in config.get("feeds", []):
+        feed = ActiveFeed(**feed_row)
+        adapter = adapter_for(feed)
+        result = adapter.fetch(feed, since_hours, fetched_at)
+
+        errors = feed.error_count + (1 if result.error else 0)
+        degraded = bool(result.degraded or errors >= DEFAULT_SOURCE_RETRY_LIMIT)
+        fetch_status = "degraded" if degraded else ("fallback" if adapter.fallback_type else "active")
+        if result.items and not result.error:
+            errors = 0
+            degraded = False
+            fetch_status = "active"
+
+        feed_state = feed.model_copy(update={
+            "fetch_status": fetch_status,
+            "error_count": errors,
+            "degraded": degraded,
+            "last_success_at": fetched_at if result.items and not result.error else feed.last_success_at,
+            "fallback_source_type": adapter.fallback_type,
+            "fallback_source_id": feed.source_id if adapter.fallback_type else feed.fallback_source_id,
+        })
+        updated_feeds.append(feed_state.model_dump(mode="json"))
+
+        for item in result.items:
+            if item.published_at and item.published_at < cutoff:
                 continue
-            url = _entry_url(entry, feed["feed_url"])
-            canonical = normalize_url(url)
-            summary = entry.get("summary") or entry.get("description")
-            content = _entry_content(entry)
-            official_source = feed.get("official_source")
-            if official_source is None:
-                official_source = is_official_source(
-                    feed_url=feed.get("feed_url"),
-                    homepage=feed.get("homepage"),
-                    publisher=feed.get("publisher"),
-                    feed_title=feed.get("feed_title"),
-                )
-            items.append(
-                NewsItem(
-                    id=compute_item_id(canonical, entry.get("title"), published_at),
-                    title=entry.get("title") or "(untitled)",
-                    url=url,
-                    canonical_url=canonical,
-                    publisher=feed.get("publisher"),
-                    feed_url=feed["feed_url"],
-                    published_at=published_at,
-                    published_at_fallback=published_at_fallback,
-                    fetched_at=fetched_at,
-                    rss_summary=summary,
-                    rss_content=content,
-                    content_level=_content_level(summary, content),
-                    fetch_status="rss_only",
-                    collector=feed.get("collector", "local_feedparser"),
-                    official_source=bool(official_source),
-                    language=feed.get("language"),
-                    topics=feed.get("topics") or [],
-                    trust_tier=feed.get("trust_tier"),
-                    source_tier=feed.get("source_tier"),
-                    source_role=feed.get("source_role"),
-                    source_format=feed.get("source_format"),
-                    source_id=feed.get("source_id"),
-                    dedupe_key=canonical,
-                    confidence="low" if feed.get("collector") == "google_news_rss" else "medium",
-                )
-            )
+            items.append(item)
+
     write_jsonl(output_path, items)
+    write_json(active_feeds_path, {"feeds": updated_feeds})
     return items

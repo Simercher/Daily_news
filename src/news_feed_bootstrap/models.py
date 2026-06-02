@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .utils import utc_now
+
 
 class PipelineModel(BaseModel):
     model_config = ConfigDict(extra="ignore", arbitrary_types_allowed=True)
@@ -17,14 +19,21 @@ class SeedSource(PipelineModel):
         "opml",
         "rss",
         "text",
+        "html_index",
         "html_feed_index",
         "feed_discovery",
         "google_news_rss",
         "generated_rss",
         "github_page",
         "web_directory",
+        "official_api",
     ]
     url: str
+    fallback_type: Literal["rss", "google_news_rss", "html_index", "official_api", "none"] | None = None
+    fetch_status: Literal["active", "degraded", "fallback", "inactive", "error"] = "active"
+    last_success_at: datetime | None = None
+    error_count: int = 0
+    degraded: bool = False
     repository: str | None = None
     priority: Literal["high", "medium_high", "medium", "low"] = "medium"
     trust_tier: Literal[
@@ -50,7 +59,10 @@ class SeedSource(PipelineModel):
         "atom",
         "opml",
         "html_feed_index",
+        "html_index",
+        "feed_discovery",
         "google_news_rss",
+        "official_api",
         "text",
         "generated_rss",
         "unknown",
@@ -126,8 +138,14 @@ class ActiveFeed(PipelineModel):
     source_name: str | None = None
     feed_title: str | None = None
     official_source: bool = False
+    fetch_status: Literal["active", "degraded", "fallback", "inactive", "error"] = "active"
+    last_success_at: datetime | None = None
+    error_count: int = 0
+    degraded: bool = False
+    fallback_source_id: str | None = None
+    fallback_source_type: str | None = None
     last_published_at: datetime | None = None
-    checked_at: datetime
+    checked_at: datetime = Field(default_factory=utc_now)
 
 
 class NewsItem(PipelineModel):
@@ -144,7 +162,7 @@ class NewsItem(PipelineModel):
     rss_content: str | None = None
     full_text: str | None = None
     content_level: Literal["summary_only", "partial", "full_text"]
-    fetch_status: Literal["rss_only", "success", "paywall", "blocked", "parse_failed", "http_error", "skipped"]
+    fetch_status: Literal["rss_only", "success", "paywall", "blocked", "parse_failed", "http_error", "skipped", "fallback", "degraded"]
     collector: str = "local_feedparser"
     official_source: bool = False
     language: str | None = None

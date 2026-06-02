@@ -8,6 +8,7 @@ from .feed_fetcher import fetch_feed_items
 from .mcp_adapter import mcp_setup_notes
 from .mcp_config_generator import generate_mcp_config_hint
 from .opml_importer import import_opml, merge_discovered
+from .source_pack_importer import merge_source_packs
 from .pipeline import bootstrap_candidates, build_active_feeds, dedup_raw_items, run_all, run_bootstrap, run_local_fetch
 
 app = typer.Typer(help="RSS feed bootstrap, health check, MCP handoff, and raw item collection.")
@@ -17,6 +18,14 @@ app = typer.Typer(help="RSS feed bootstrap, health check, MCP handoff, and raw i
 def bootstrap_seeds(config_path: str = "configs/seed_sources.yaml") -> None:
     feeds = bootstrap_candidates(config_path)
     typer.echo(f"Imported/merged {len(feeds)} candidate feeds -> data/imported_feeds.json")
+
+
+@app.command("import-source-packs")
+def import_source_packs(*pack_paths: str, output_path: str = "configs/seed_sources.yaml") -> None:
+    if not pack_paths:
+        raise typer.BadParameter("Provide at least one source pack path.")
+    merged = merge_source_packs(list(pack_paths), output_path=output_path)
+    typer.echo(f"Merged {len(pack_paths)} source pack(s); seed registry now has {len(merged)} entries -> {output_path}")
 
 
 @app.command("import-opml")
