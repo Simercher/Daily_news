@@ -1,0 +1,7 @@
+rss:
+  - name: Example
+    url: https://example.com/rss.xml
+newsapi:
+  base_url: https://newsapi.org/v2
+gdelt:
+  base_url: https://api.gdeltproject.org/api/v2/doc/doc

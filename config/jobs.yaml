@@ -1,0 +1,7 @@
+jobs:
+  collect:
+    interval_minutes: 15
+  build_events:
+    interval_minutes: 60
+  watch_breaking:
+    interval_minutes: 5

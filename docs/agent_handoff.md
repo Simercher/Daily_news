@@ -1,383 +1,167 @@
-# Agent Handoff Runbook
+# Daily_news Agent Handoff
 
-This is the canonical automation-agent runbook for the Daily News RSS MVP.
+This document is the handoff/runbook for an automation agent that needs to work on or operate the Daily_news repository.
 
-Use this file for all non-human execution instructions. `docs/hermes_agent_workflow.md` is only a short Hermes-specific overlay and must not duplicate this runbook.
+## Project purpose
 
-## What this repo is
+Daily_news is a Python news data layer MVP. It collects candidate news articles, normalizes and stores articles/events, deduplicates and clusters related items, scores events, marks breaking events, and exposes read access through a CLI and FastAPI application.
 
-This project is an RSS feed bootstrap and raw news collection layer.
+The Python project name must remain `Daily_news` in `pyproject.toml`. The command-line entry point is `daily-news`. The internal Python package namespace is `news_system`; keep that namespace in imports and source-path references.
 
-It prepares:
+## Current scope
 
-- active RSS feed metadata;
-- conservative `official_source` provenance on feeds and items;
-- active feed OPML for future MCP handoff;
-- raw RSS item JSONL;
-- deduplicated downstream JSONL;
-- deterministic exact-URL deduplication output;
-- downstream semantic labels from `profiles/domain-classifier`, including daily section routing and same-event cluster metadata;
-- a structured fulltext-fetch manifest for `rss_reader_mcp`.
+In scope now:
 
-It does **not** summarize, rank, call LLM APIs from the Python RSS pipeline, post to Discord, fetch paywalled content, bypass access controls, or run a real MCP stdio RSS client yet.
+- RSS, NewsAPI, and GDELT collection interfaces.
+- SQLAlchemy database models and repository helpers.
+- Alembic migration scaffold for PostgreSQL.
+- Article normalization.
+- Deterministic URL-based de-duplication.
+- Event clustering, scoring, and breaking-event detection.
+- CLI jobs for collection and event views.
+- FastAPI read endpoints.
 
-Semantic domain classification and title-similarity same-event clustering are delegated to the Hermes `profiles/domain-classifier` agent after `data/news_items_deduped.jsonl` exists.
+Out of scope now:
 
-## Documentation Contract
+- LLM summarization or ranking by an LLM.
+- Discord posting.
+- Frontend/UI.
+- Multi-agent orchestration.
+- Paywall/CAPTCHA bypassing or restricted-content access.
 
-- `README.md` and `docs/README_CN.md` are for humans.
-- `docs/agent_handoff.md` is the canonical runbook for agents.
-- `docs/hermes_agent_workflow.md` is Hermes-specific and should stay short. If it starts duplicating the runbook, merge the repeated content back into `docs/agent_handoff.md`.
-- If a file matches `docs/change_log_*.md`, it is a local-only developer log and should not be committed to GitHub.
+## Environment setup
 
-When the repo adds or changes an MCP service, the agent docs must explain enough for a fresh agent to:
-
-1. understand what the MCP service is for;
-2. know whether to use it directly or through `--mode auto` / local fallback;
-3. know which config file to update, especially `/opt/data/config.yaml` or other repo settings;
-4. know whether the MCP repo should live under `external/`, stay ignored, or be referenced only through a build artifact.
-
-## First thing to check
-
-Before doing anything else, confirm the working tree and the environment are ready.
-
-### Dependencies and environment
-
-Run from the repository root:
+Run commands from the repository root:
 
 ```bash
-uv sync
-uv run python scripts/agent_status.py
+cd /opt/data/plugins/Daily_news
 ```
 
-If development dependencies are missing, install them:
+Requirements:
+
+- Python 3.11+
+- `uv`
+
+Recommended environment command:
 
 ```bash
-uv sync --dev
+UV_PROJECT_ENVIRONMENT=.venv-news-system uv sync --dev
 ```
 
-If agent validation or linting depends on extra packages, confirm they are installed before continuing. If a command fails because a dependency is missing, the agent should fix the environment first instead of guessing around it.
-
-## How to start
-
-Use the agent scripts, not the human-oriented `news-feed` CLI, because agent scripts print one final JSON object to stdout and write logs to `data/logs/`.
-
-Recommended one-shot run:
+A standard `.venv` can also be used if the caller prefers:
 
 ```bash
-uv run python scripts/agent_run_daily.py --mode auto --since-hours 24
+UV_PROJECT_ENVIRONMENT=.venv uv sync --dev
 ```
 
-Behavior:
+Notes:
 
-- bootstraps automatically if `data/active_feeds.json` or `data/active_feeds.opml` is missing or older than 24 hours;
-- writes `data/logs/mcp_config_hint.json`;
-- fetches through local feedparser because real MCP fetch is not implemented yet;
-- deduplicates into `data/news_items_deduped.jsonl`.
+- `.venv-news-system` is only a virtual environment name. Do not treat it as the project name.
+- `uv.lock` may normalize the package name to `daily-news`; that is acceptable. `pyproject.toml` must keep `name = "Daily_news"`.
 
-## Runtime contract
+## Verification and tests
 
-Rules:
+Primary test command:
 
-1. Parse the final stdout JSON object, not human logs.
-2. Treat `ok: true` as success.
-3. Treat `ok: false` with exit code `2` as configuration failure.
-4. Treat `ok: false` with exit code `3` as external-service/MCP failure; local fallback is usually allowed.
-5. If item counts are `0`, inspect `warnings` and network access to `raw.githubusercontent.com` / RSS hosts.
+```bash
+UV_PROJECT_ENVIRONMENT=.venv-news-system uv run pytest -q
+```
 
-Exit codes:
+CLI smoke test:
 
-- `0`: success
-- `1`: recoverable runtime error
-- `2`: configuration error
-- `3`: external service or MCP error
+```bash
+UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news --help
+```
 
-## Pipeline order
+Directory cleanup check:
+
+```bash
+test ! -d data && test ! -d legacy
+```
+
+If a dependency or interpreter is missing, repair the uv environment first and rerun the command. Do not infer success without real command output.
+
+## CLI
+
+Entrypoint:
+
+```bash
+UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news --help
+```
+
+Current subcommands:
+
+```bash
+UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news collect --source all --lookback-hours 1
+UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news build-events
+UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news watch-breaking
+UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news show-daily
+UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news show-breaking
+```
+
+Current CLI output is compact JSON for job results.
+
+## API
+
+FastAPI app object:
 
 ```text
-configs/seed_sources.yaml
--> import enabled curated OPML/TXT feed lists
--> strict OPML parse, with tolerant xmlUrl/htmlUrl/title/text fallback for malformed OPML
--> data/imported_feeds.json and data/imported_feeds.opml
--> minimum feed health check
--> data/active_feeds.json and data/active_feeds.opml
--> conservative official_source marking from configs/official_sources.yaml
--> local RSS item fetch, or MCP-first fetch with local fallback
--> data/news_items_raw.jsonl
--> normalized exact-URL deduplication
--> data/news_items_deduped.jsonl
--> domain-classifier semantic labeling
--> data/news_item_labels.jsonl
--> rss_reader_mcp fulltext fetch
--> data/news_item_fulltext.jsonl
+news_system.api.main:app
 ```
 
-## Step-by-step run
-
-Use this when the agent needs explicit checkpoints:
+Run locally:
 
 ```bash
-uv run python scripts/agent_bootstrap.py
-uv run python scripts/agent_generate_mcp_config.py --server imprvhub_mcp_rss_aggregator
-uv run python scripts/agent_fetch_latest.py --mode local --since-hours 24
-uv run python scripts/agent_dedup.py
-uv run python scripts/agent_classify_articles.py
-uv run python scripts/agent_fetch_fulltext.py
+UV_PROJECT_ENVIRONMENT=.venv-news-system uv run uvicorn news_system.api.main:app --reload
 ```
 
-After this, downstream aggregation agents should read `data/news_item_fulltext.jsonl` rather than the manifest alone.
+Endpoints:
 
-The classifier output is the first layer that should contain:
+- `GET /events/daily?date=YYYY-MM-DD&limit=10`
+- `GET /events/breaking?since_minutes=180&limit=20`
+- `GET /events/{event_id}`
 
-- `daily_section`: `international`, `macro`, `stocks`, `tech_ai`, or `other`;
-- `event_cluster_id`: stable same-event cluster ID for this batch;
-- `event_primary_article_id`: representative article for the cluster;
-- `duplicate_of_article_id`: `null` for the primary article, otherwise the cluster primary article ID;
-- `same_event_confidence` and `same_event_reason`.
+These endpoints read from the configured SQLAlchemy session/database.
 
-The classifier must not edit `data/news_items_deduped.jsonl`; it writes labels beside it so downstream ranking/digest generation can choose one primary article per event cluster while retaining supporting sources.
+## Database and Alembic
 
-## Fulltext fetch contract
+Important files/directories:
 
-`rss_reader_mcp` is the next-stage MCP server for fulltext extraction. Its GitHub source is:
+- `src/news_system/db/models.py` — SQLAlchemy models.
+- `src/news_system/db/session.py` — session/engine setup.
+- `src/news_system/storage/` — repository helpers.
+- `alembic.ini` — Alembic config.
+- `alembic/versions/0001_create_news_tables.py` — initial migration.
+
+Default Alembic URL in `alembic.ini`:
 
 ```text
-https://github.com/kwp-lab/rss-reader-mcp.git
+postgresql+psycopg://news:news@localhost:5432/news
 ```
 
-The repo should be placed under `external/rss-reader-mcp/` in the same style as `external/mcp-rss-aggregator/`.
-
-`rss_reader_mcp` does **not** classify or summarize. It only reads `data/news_item_labels.jsonl`, fetches article fulltext using the manifest's URLs and hints, and writes a fulltext-enriched JSONL for later aggregation agents.
-
-Primary input:
-
-```text
-data/news_item_labels.jsonl
-```
-
-Primary output:
-
-```text
-data/news_item_fulltext.jsonl
-```
-
-## MCP and config guidance
-
-When an MCP service is involved, the agent should know:
-
-- what the service is for;
-- whether to use it directly, or keep `--mode auto` / local fallback as the default;
-- which config file to inspect or update, especially `/opt/data/config.yaml`;
-- whether the MCP repo is ignored in `external/`, referenced via build artifact, or kept out of GitHub.
-
-Current Hermes-native MCP state in this environment:
-
-- `/opt/data/config.yaml` has `mcp_servers.rssAggregator`, pointing at `external/mcp-rss-aggregator/build/index.js` with `FEEDS_PATH=data/active_feeds.opml`.
-- `hermes mcp test rssAggregator` can connect and discover a `rss` tool.
-- The local ignored `external/mcp-rss-aggregator` patch fixes same-domain feed ID collisions by using host + path/query + a short URL hash for feed IDs.
-- `external/` is gitignored; do not commit or fork it in this step.
-- Daily_news Python pipeline still uses local feedparser in `--mode auto` until a stdio MCP client/normalizer is added.
-
-## File responsibilities
-
-- `data/news_item_labels.jsonl`: enriched article manifest used by `rss_reader_mcp`.
-- `data/news_item_fulltext.jsonl`: fulltext-enriched article records for later summarization/aggregation agents.
-- `src/news_feed_bootstrap/rss_reader_mcp.py`: Python-side MCP adapter that turns manifest rows into MCP calls.
-- `src/news_feed_bootstrap/fulltext_fetcher.py`: orchestration layer that drives the fulltext stage.
-- `scripts/agent_fetch_fulltext.py`: manual / agent entrypoint for fulltext extraction.
-
-## Verification commands
+Apply migrations only after confirming the target database and credentials:
 
 ```bash
-uv run pytest -q
-uv run ruff check src scripts tests
-uv build
+UV_PROJECT_ENVIRONMENT=.venv-news-system uv run alembic upgrade head
 ```
 
-If `uv run` fails because the environment is incomplete, fix the missing dependency or interpreter setup first, then rerun the command.
+## Main directories
 
-## Non-goals
+- `src/news_system/collectors/` — collectors for configured sources.
+- `src/news_system/processors/` — normalization, de-duplication, event clustering, scoring, breaking detection.
+- `src/news_system/jobs/` — orchestration functions used by the CLI.
+- `src/news_system/api/` — FastAPI app.
+- `src/news_system/db/` — database models and session setup.
+- `src/news_system/storage/` — persistence/repository helpers.
+- `tests/` — pytest unit tests.
+- `alembic/` — database migration scripts.
+- `docs/` — documentation.
 
-`rss_reader_mcp` does **not**:
+## Common cautions
 
-- summarize articles;
-- write daily digests;
-- assign categories;
-- choose the final briefing articles;
-- replace the domain-classifier stage.
-
-## Bootstrap and Timeout Controls
-
-```bash
-uv run python scripts/agent_run_daily.py --mode auto --since-hours 24 --force-bootstrap
-uv run python scripts/agent_run_daily.py --mode auto --since-hours 24 --skip-bootstrap
-NEWS_FEED_TIMEOUT_SECONDS=3 uv run python scripts/agent_run_daily.py --mode auto --since-hours 24 --force-bootstrap
-```
-
-Constraints:
-
-- Do not combine `--force-bootstrap` and `--skip-bootstrap`.
-- `NEWS_FEED_TIMEOUT_SECONDS` defaults to `15`.
-- Use a short timeout for validation if slow RSS hosts would otherwise exceed the automation budget.
-- Use the default or a higher timeout when completeness matters more than runtime.
-
-## MCP Modes
-
-Supported server IDs for config hints:
-
-- `imprvhub_mcp_rss_aggregator`
-- `buhe_mcp_rss`
-- `rss_reader_mcp`
-- `veithly_rss_mcp`
-
-Generate only the config hint:
-
-```bash
-uv run python scripts/agent_generate_mcp_config.py --server imprvhub_mcp_rss_aggregator
-```
-
-Expected mode behavior:
-
-| Mode | Command shape | Expected MVP behavior |
-| --- | --- | --- |
-| `local` | `agent_fetch_latest.py --mode local --since-hours 24` | Fetches with local feedparser. |
-| `auto` | `agent_fetch_latest.py --mode auto --server imprvhub_mcp_rss_aggregator --since-hours 24` | Writes MCP hint, warns, falls back to local feedparser, exits `0`. |
-| `mcp` | `agent_fetch_latest.py --mode mcp --server imprvhub_mcp_rss_aggregator --since-hours 24` | Writes MCP hint, returns `ok: false`, exits `3`. |
-
-Do not treat `--mode mcp` exit code `3` as an unexpected regression in this MVP. It is the documented behavior until a real MCP stdio client is implemented.
-
-Hermes native MCP status in the current deployment:
-
-- `/opt/data/config.yaml` contains `mcp_servers.rssAggregator` with command `node`, args `/opt/data/plugins/Daily_news/external/mcp-rss-aggregator/build/index.js`, and env `FEEDS_PATH=/opt/data/plugins/Daily_news/data/active_feeds.opml`.
-- `hermes mcp test rssAggregator` should connect and discover one `rss` tool.
-- Direct MCP stdio smoke has worked against the active OPML: 155 OPML outlines, 155 MCP-listed feeds, and `latest --5` returned items.
-- The local ignored `external/mcp-rss-aggregator` patch generates feed IDs from host + path/query + short URL hash, so same-domain feeds no longer overwrite each other in the MCP feed map.
-- `external/` is gitignored. Do not commit it in this repo; preserve this patch later by upstreaming/forking or by adding an explicit setup patch step if MCP persistence is needed.
-- This validates that the MCP server can run under Hermes, but the Daily_news Python pipeline still does not call the MCP tool directly. Until a stdio MCP client and output normalizer are implemented, `--mode auto` remains the correct automation default and should produce `collector: "local_feedparser"`.
-
-## JSON Contract
-
-Success shape:
-
-```json
-{
-  "ok": true,
-  "command": "agent_run_daily",
-  "message": "Daily RSS pipeline completed.",
-  "outputs": {},
-  "stats": {},
-  "warnings": []
-}
-```
-
-Failure shape:
-
-```json
-{
-  "ok": false,
-  "command": "agent_fetch_latest",
-  "message": "RSS fetch failed.",
-  "error": {
-    "type": "ExternalServiceError",
-    "detail": "MCP server is not reachable."
-  },
-  "outputs": {},
-  "stats": {},
-  "warnings": ["Fallback to local mode is available."]
-}
-```
-
-Output artifact contract additions:
-
-- `data/active_feeds.json` stores active feed rows with `official_source: bool`.
-- `data/news_items_raw.jsonl` stores raw item rows with `collector` and `official_source: bool`.
-- `data/news_items_deduped.jsonl` stores downstream rows with top-level `collector`, top-level `official_source: bool`, and the original raw item under `raw`.
-- `official_source: true` is only a conservative allowlist/provenance hint for downstream cross-source verification. It is **not** a full credibility score; unknown blogs, aggregators, community feeds, and vendor feeds remain `false` until reviewed.
-
-Representative downstream row fields:
-
-```json
-{
-  "id": "...",
-  "title": "...",
-  "url": "...",
-  "normalized_url": "...",
-  "feed_url": "...",
-  "collector": "local_feedparser",
-  "official_source": true,
-  "raw": {
-    "collector": "local_feedparser",
-    "official_source": true
-  }
-}
-```
-
-## Important Files
-
-| Path | Purpose |
-| --- | --- |
-| `configs/seed_sources.yaml` | Curated OPML/TXT seed sources; `enabled: false` keeps candidates without importing them. |
-| `configs/official_sources.yaml` | Conservative allowlist used to mark `official_source` on active feeds and items. |
-| `data/imported_feeds.json` | Imported feed candidates. |
-| `data/imported_feeds.opml` | Imported feed candidates as OPML. |
-| `data/feed_health.jsonl` | Feed health check results. |
-| `data/active_feeds.json` | Active feed metadata, including `official_source`. |
-| `data/active_feeds.opml` | OPML handoff file for RSS MCP servers. |
-| `data/inactive_feeds.json` | Inactive or failed feed candidates plus health information. |
-| `data/news_items_raw.jsonl` | Raw RSS item output, including `collector` and `official_source`. |
-| `data/news_items_deduped.jsonl` | Main downstream model/agent input, including top-level `collector` and `official_source`. |
-| `data/news_item_labels.jsonl` | Enriched article manifest with clustering, domain labels, and fulltext fetch hints. |
-| `data/logs/mcp_config_hint.json` | Generated MCP config hint. |
-
-Downstream agents should usually read:
-
-```text
-data/news_items_deduped.jsonl
-```
-
-Ranking and digest candidate agents should read both:
-
-```text
-data/news_items_deduped.jsonl
-data/news_item_labels.jsonl
-```
-
-Rows include `collector`, currently `local_feedparser`, and `official_source`, currently derived from `configs/official_sources.yaml`. Future MCP integration should write `collector: "mcp:<server_id>"` while preserving `official_source` propagation.
-
-## Source Configuration
-
-Currently enabled families:
-
-- `feedsForJournalists` OPML
-- `plenaryapp/awesome-rss-feeds` United States / United Kingdom
-- `awesome-tech-rss`
-
-Currently disabled candidates:
-
-- `feedsForJournalists` text list
-- `SecurityRSS`
-- `awesome_ML_AI_RSS_feed`
-- `awesome-newsCN-feeds`
-
-Only enable disabled candidates after checking source quality and whether the downstream briefing needs that topic.
-
-## Validation Commands
-
-```bash
-uv run pytest -q
-uv run ruff check src scripts tests
-uv build
-```
-
-For an end-to-end validation run:
-
-```bash
-NEWS_FEED_TIMEOUT_SECONDS=3 uv run python scripts/agent_run_daily.py --mode auto --server imprvhub_mcp_rss_aggregator --since-hours 24 --force-bootstrap
-```
-
-## Troubleshooting
-
-- `imported_feeds`, `active_feeds`, or item counts are `0`: check network access to GitHub raw URLs and RSS hosts.
-- Forced bootstrap takes too long: use `NEWS_FEED_TIMEOUT_SECONDS=3` for validation.
-- `--mode mcp` exits `3`: expected MVP behavior; use `--mode auto` or `--mode local`.
-- JSON says `ok: false`: inspect `error.type`, `error.detail`, and `warnings` before retrying.
+- Do not reintroduce old generated/runtime directories named `data/` or `legacy/` unless the user explicitly asks for new runtime output behavior.
+- Do not rename the internal package namespace from `news_system` without a separate migration plan.
+- Do not confuse package-name normalization in lockfiles or wheels with the required `pyproject.toml` name.
+- Keep README.md in English and `docs/README_CN.md` as the matching Traditional Chinese version.
+- This repo currently has no LLM, Discord, frontend, or multi-agent runtime; do not document those as implemented features.
+- Do not commit changes unless explicitly instructed.

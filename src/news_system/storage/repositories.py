@@ -1,0 +1,102 @@
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from typing import Iterable
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from news_system.db.models import ArticleModel, CollectionRun, EventArticle, EventModel, NewsSource
+from news_system.processors.normalizer import canonicalize_url, normalize_title, url_hash
+
+
+class SourceRepository:
+    def __init__(self, db: Session): self.db = db
+
+    def upsert(self, *, name: str, type: str = "rss", url: str | None = None, **fields) -> NewsSource:
+        obj = self.db.execute(select(NewsSource).where(NewsSource.name == name)).scalar_one_or_none()
+        if obj is None:
+            obj = NewsSource(name=name, type=type, url=url, **fields)
+            self.db.add(obj)
+        else:
+            obj.type = type or obj.type; obj.url = url or obj.url
+            for k, v in fields.items(): setattr(obj, k, v)
+        self.db.flush(); return obj
+
+    def list_enabled(self) -> list[NewsSource]:
+        return list(self.db.execute(select(NewsSource).where(NewsSource.enabled == True)).scalars())
+
+
+class ArticleRepository:
+    def __init__(self, db: Session): self.db = db
+
+    def _prepare(self, article: ArticleModel) -> ArticleModel:
+        article.canonical_url = article.canonical_url or canonicalize_url(article.url)
+        article.url_hash = article.url_hash or url_hash(article.url)
+        article.normalized_title = article.normalized_title or normalize_title(article.title)
+        if article.published_at.tzinfo is None:
+            article.published_at = article.published_at.replace(tzinfo=timezone.utc)
+        return article
+
+    def add(self, article: ArticleModel) -> ArticleModel:
+        self.db.add(self._prepare(article)); self.db.flush(); return article
+
+    def upsert(self, article: ArticleModel) -> tuple[ArticleModel, bool]:
+        self._prepare(article)
+        existing = self.db.execute(select(ArticleModel).where(ArticleModel.url_hash == article.url_hash)).scalar_one_or_none()
+        if existing:
+            return existing, False
+        self.db.add(article); self.db.flush(); return article, True
+
+    def get(self, article_id: int) -> ArticleModel | None: return self.db.get(ArticleModel, article_id)
+
+    def list_recent(self, *, hours: int = 24, include_duplicates: bool = False, limit: int | None = None) -> list[ArticleModel]:
+        since = datetime.now(timezone.utc) - timedelta(hours=hours)
+        stmt = select(ArticleModel).where(ArticleModel.published_at >= since)
+        if not include_duplicates: stmt = stmt.where(ArticleModel.is_duplicate == False)
+        stmt = stmt.order_by(ArticleModel.published_at.desc())
+        if limit: stmt = stmt.limit(limit)
+        rows = list(self.db.execute(stmt).scalars())
+        for row in rows:
+            row.ensure_utc()
+        return rows
+
+    def list(self, limit: int = 100) -> list[ArticleModel]:
+        return list(self.db.execute(select(ArticleModel).order_by(ArticleModel.published_at.desc()).limit(limit)).scalars())
+
+
+class EventRepository:
+    def __init__(self, db: Session): self.db = db
+
+    def add(self, event: EventModel, articles: Iterable[ArticleModel] = ()) -> EventModel:
+        self.db.add(event); self.db.flush()
+        for article in articles: self.link_article(event.id, article.id)
+        self.db.flush(); return event
+
+    def link_article(self, event_id: int, article_id: int, relevance_score: float = 1.0) -> EventArticle:
+        link = self.db.get(EventArticle, {"event_id": event_id, "article_id": article_id})
+        if link is None:
+            link = EventArticle(event_id=event_id, article_id=article_id, relevance_score=relevance_score)
+            self.db.add(link)
+        else:
+            link.relevance_score = relevance_score
+        self.db.flush(); return link
+
+    def list_daily(self, date: datetime, limit: int = 10) -> list[EventModel]:
+        start = date.replace(hour=0, minute=0, second=0, microsecond=0); end = start + timedelta(days=1)
+        return list(self.db.execute(select(EventModel).where(EventModel.event_date >= start, EventModel.event_date < end).order_by(EventModel.final_score.desc()).limit(limit)).scalars())
+
+    def list_breaking(self, since_minutes: int = 180, limit: int = 20) -> list[EventModel]:
+        since = datetime.now(timezone.utc) - timedelta(minutes=since_minutes)
+        return list(self.db.execute(select(EventModel).where(EventModel.is_breaking == True, EventModel.created_at >= since).order_by(EventModel.final_score.desc()).limit(limit)).scalars())
+
+
+class CollectionRunRepository:
+    def __init__(self, db: Session): self.db = db
+    def start(self, source: str) -> CollectionRun:
+        run = CollectionRun(source=source, status="running"); self.db.add(run); self.db.flush(); return run
+    def finish(self, run: CollectionRun, *, fetched_count: int, inserted_count: int, error: str | None = None) -> CollectionRun:
+        run.finished_at = datetime.now(timezone.utc); run.fetched_count = fetched_count; run.inserted_count = inserted_count; run.error = error; run.status = "failed" if error else "success"; self.db.flush(); return run
+
+
+__all__ = ["ArticleRepository", "EventRepository", "SourceRepository", "CollectionRunRepository", "ArticleModel", "EventModel", "EventArticle", "NewsSource", "CollectionRun"]

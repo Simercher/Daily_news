@@ -1,0 +1,2 @@
+database_url: ${DATABASE_URL}
+default_lookback_hours: 1

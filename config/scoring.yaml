@@ -1,0 +1,6 @@
+weights:
+  velocity: 0.35
+  source_diversity: 0.25
+  severity: 0.25
+  recency: 0.15
+breaking_threshold: 0.75
