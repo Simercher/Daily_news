@@ -33,3 +33,6 @@ packages = ["src/news_system"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = [
+  "integration: tests that require external services such as PostgreSQL",
+]
