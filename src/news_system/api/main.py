@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date as date_type
 from news_system.db.session import SessionLocal
 from news_system.db.models import EventModel, ArticleModel, EventArticle
 
@@ -13,8 +13,8 @@ def get_db():
 
 @app.get('/events/daily')
 def daily(date: str, limit: int=10, db: Session=Depends(get_db)):
-    start=datetime.fromisoformat(date).replace(tzinfo=timezone.utc); end=start+timedelta(days=1)
-    return db.query(EventModel).filter(EventModel.event_date>=start, EventModel.event_date<end).order_by(EventModel.final_score.desc()).limit(limit).all()
+    event_day = date_type.fromisoformat(date)
+    return db.query(EventModel).filter(EventModel.event_date == event_day).order_by(EventModel.final_score.desc()).limit(limit).all()
 
 @app.get('/events/breaking')
 def breaking(since_minutes: int=180, limit: int=20, db: Session=Depends(get_db)):

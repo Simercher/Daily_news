@@ -3,7 +3,8 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 from news_system.db.models import Base
 config=context.config
-if config.config_file_name: fileConfig(config.config_file_name)
+if config.config_file_name and config.file_config.has_section("loggers"):
+    fileConfig(config.config_file_name)
 target_metadata=Base.metadata
 def run_migrations_offline():
     context.configure(url=config.get_main_option('sqlalchemy.url'), target_metadata=target_metadata, literal_binds=True)

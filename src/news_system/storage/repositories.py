@@ -13,13 +13,14 @@ from news_system.processors.normalizer import canonicalize_url, normalize_title,
 class SourceRepository:
     def __init__(self, db: Session): self.db = db
 
-    def upsert(self, *, name: str, type: str = "rss", url: str | None = None, **fields) -> NewsSource:
+    def upsert(self, *, name: str, source_type: str | None = None, type: str | None = None, url: str | None = None, **fields) -> NewsSource:
+        source_type = source_type or type or "rss"
         obj = self.db.execute(select(NewsSource).where(NewsSource.name == name)).scalar_one_or_none()
         if obj is None:
-            obj = NewsSource(name=name, type=type, url=url, **fields)
+            obj = NewsSource(name=name, source_type=source_type, url=url, **fields)
             self.db.add(obj)
         else:
-            obj.type = type or obj.type; obj.url = url or obj.url
+            obj.source_type = source_type or obj.source_type; obj.url = url or obj.url
             for k, v in fields.items(): setattr(obj, k, v)
         self.db.flush(); return obj
 
@@ -83,8 +84,8 @@ class EventRepository:
         self.db.flush(); return link
 
     def list_daily(self, date: datetime, limit: int = 10) -> list[EventModel]:
-        start = date.replace(hour=0, minute=0, second=0, microsecond=0); end = start + timedelta(days=1)
-        return list(self.db.execute(select(EventModel).where(EventModel.event_date >= start, EventModel.event_date < end).order_by(EventModel.final_score.desc()).limit(limit)).scalars())
+        event_day = date.date() if isinstance(date, datetime) else date
+        return list(self.db.execute(select(EventModel).where(EventModel.event_date == event_day).order_by(EventModel.final_score.desc()).limit(limit)).scalars())
 
     def list_breaking(self, since_minutes: int = 180, limit: int = 20) -> list[EventModel]:
         since = datetime.now(timezone.utc) - timedelta(minutes=since_minutes)
@@ -93,10 +94,10 @@ class EventRepository:
 
 class CollectionRunRepository:
     def __init__(self, db: Session): self.db = db
-    def start(self, source: str) -> CollectionRun:
-        run = CollectionRun(source=source, status="running"); self.db.add(run); self.db.flush(); return run
-    def finish(self, run: CollectionRun, *, fetched_count: int, inserted_count: int, error: str | None = None) -> CollectionRun:
-        run.finished_at = datetime.now(timezone.utc); run.fetched_count = fetched_count; run.inserted_count = inserted_count; run.error = error; run.status = "failed" if error else "success"; self.db.flush(); return run
+    def start(self, source: str, source_type: str = "rss", lookback_hours: int | None = None) -> CollectionRun:
+        run = CollectionRun(source_name=source, source_type=source_type, lookback_hours=lookback_hours, status="running"); self.db.add(run); self.db.flush(); return run
+    def finish(self, run: CollectionRun, *, fetched_count: int, inserted_count: int, duplicate_count: int = 0, error: str | None = None) -> CollectionRun:
+        run.finished_at = datetime.now(timezone.utc); run.fetched_count = fetched_count; run.inserted_count = inserted_count; run.duplicate_count = duplicate_count; run.error_message = error; run.error_count = 1 if error else 0; run.status = "failed" if error else "success"; self.db.flush(); return run
 
 
 __all__ = ["ArticleRepository", "EventRepository", "SourceRepository", "CollectionRunRepository", "ArticleModel", "EventModel", "EventArticle", "NewsSource", "CollectionRun"]

@@ -19,7 +19,21 @@ from news_system.storage.repositories import ArticleRepository, CollectionRunRep
 def _to_model(a) -> ArticleModel:
     if isinstance(a, ArticleModel): return a
     data = a.model_dump() if hasattr(a, "model_dump") else dict(a)
-    return ArticleModel(**{k: v for k, v in data.items() if hasattr(ArticleModel, k)})
+    aliases = {
+        "source_id": "external_id",
+        "content": "content_snippet",
+        "raw": "raw_payload",
+        "duplicate_of_id": "duplicate_of_article_id",
+    }
+    for old, new in aliases.items():
+        if old in data and new not in data:
+            data[new] = data.pop(old)
+    raw_payload = dict(data.get("raw_payload") or {})
+    for compat_key in ("keywords", "entities"):
+        if compat_key in data:
+            raw_payload[compat_key] = data.pop(compat_key)
+    data["raw_payload"] = raw_payload
+    return ArticleModel(**{k: v for k, v in data.items() if k in ArticleModel.__table__.columns})
 
 
 def _load_collectors(config_path: str | Path = "config/sources.yaml"):
@@ -42,7 +56,7 @@ def collect_job(db: Session | None = None, source: str = "all", lookback_hours: 
     runs = []
     for c in collectors:
         name = getattr(c, "source_name", None) or c.__class__.__name__
-        run = CollectionRunRepository(db).start(name) if db else None
+        run = CollectionRunRepository(db).start(name, source_type=c.__class__.__name__.replace("Collector", "").lower() or "rss", lookback_hours=lookback_hours) if db else None
         fetched = inserted = 0; error = None
         try:
             items = c.fetch(lookback_hours=lookback_hours) or []
@@ -65,7 +79,24 @@ def collect_job(db: Session | None = None, source: str = "all", lookback_hours: 
 def _persist_events(db: Session, events) -> list[EventModel]:
     repo = EventRepository(db); out = []
     for ev in events:
-        model = EventModel(title=ev.title, event_date=max((a.published_at for a in ev.articles), default=datetime.now(timezone.utc)), keywords=list(ev.keywords), entities=list(ev.entities), article_count=len(ev.articles), velocity_score=ev.velocity_score, source_diversity_score=ev.source_diversity_score, severity_score=ev.severity_score, final_score=ev.final_score, is_breaking=getattr(ev, "is_breaking", False))
+        event_dt = max((a.published_at for a in ev.articles), default=datetime.now(timezone.utc))
+        model = EventModel(
+            title=ev.title,
+            normalized_title=getattr(ev, "normalized_title", None),
+            event_date=event_dt.date(),
+            first_seen_at=min((a.published_at for a in ev.articles), default=event_dt),
+            last_seen_at=event_dt,
+            keywords=list(ev.keywords),
+            entities=ev.entities if isinstance(getattr(ev, "entities", {}), dict) else {"items": list(ev.entities)},
+            article_count=len(ev.articles),
+            source_count=len({getattr(a, "source_name", None) or getattr(a, "source_domain", None) for a in ev.articles if getattr(a, "source_name", None) or getattr(a, "source_domain", None)}),
+            popular_score=ev.source_diversity_score,
+            importance_score=ev.severity_score,
+            breaking_score=ev.velocity_score,
+            final_score=ev.final_score,
+            is_breaking=getattr(ev, "is_breaking", False),
+            breaking_detected_at=datetime.now(timezone.utc) if getattr(ev, "is_breaking", False) else None,
+        )
         repo.add(model, ev.articles); out.append(model)
     db.commit(); return out
 

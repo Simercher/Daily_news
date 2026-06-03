@@ -29,6 +29,18 @@ def test_create_all_creates_required_tables():
     assert {"news_sources", "articles", "events", "event_articles", "collection_runs"} <= tables
 
 
+def test_sqlalchemy_metadata_matches_target_schema_columns():
+    expected = {
+        "news_sources": {"id", "source_type", "name", "domain", "url", "country", "language", "category", "trusted", "enabled", "priority", "created_at", "updated_at"},
+        "articles": {"id", "external_id", "source_type", "source_name", "source_domain", "title", "normalized_title", "description", "content_snippet", "url", "canonical_url", "url_hash", "language", "country", "category", "published_at", "collected_at", "raw_payload", "title_hash", "content_hash", "is_duplicate", "duplicate_of_article_id", "created_at", "updated_at"},
+        "events": {"id", "title", "normalized_title", "category", "severity", "event_date", "first_seen_at", "last_seen_at", "article_count", "source_count", "trusted_source_count", "country_count", "popular_score", "importance_score", "breaking_score", "final_score", "status", "is_breaking", "breaking_detected_at", "keywords", "entities", "created_at", "updated_at"},
+        "event_articles": {"event_id", "article_id", "relevance_score", "is_representative", "created_at"},
+        "collection_runs": {"id", "source_type", "source_name", "started_at", "finished_at", "status", "lookback_hours", "fetched_count", "inserted_count", "duplicate_count", "error_count", "error_message", "metadata", "created_at", "updated_at"},
+    }
+    for table_name, columns in expected.items():
+        assert set(Base.metadata.tables[table_name].columns.keys()) == columns
+
+
 def test_migration_file_contains_required_table_ops():
     migration = Path("alembic/versions/0001_create_news_tables.py").read_text()
     for table in ["news_sources", "articles", "events", "event_articles", "collection_runs"]:
