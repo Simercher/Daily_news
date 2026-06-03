@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable
@@ -150,10 +151,74 @@ def collect_job(db: Session | None = None, source: str = "all", lookback_hours: 
             db.close()
 
 
+BREAKING_CATEGORIES = {"war_conflict", "disaster", "politics", "economy", "health"}
+EXTREME_BREAKING_CATEGORIES = {"war_conflict", "disaster"}
+
+
+def _source_key(article) -> str | None:
+    return getattr(article, "source_name", None) or getattr(article, "source_domain", None) or getattr(article, "external_id", None)
+
+
+def _is_trusted_source(article) -> bool:
+    raw = getattr(article, "raw_payload", None) or {}
+    cfg = raw.get("source_config") if isinstance(raw, dict) else None
+    if isinstance(cfg, dict) and cfg.get("trusted") is not None:
+        return bool(cfg.get("trusted"))
+    # Backward compatibility for legacy data/tests without source_config metadata:
+    # unknown sources are usable; explicit trusted=False still blocks.
+    return True
+
+
+def _event_category(articles) -> str | None:
+    counts = Counter(getattr(a, "category", None) for a in articles if getattr(a, "category", None))
+    if counts:
+        return counts.most_common(1)[0][0]
+    text = " ".join(
+        " ".join([
+            getattr(a, "title", "") or "",
+            getattr(a, "description", "") or "",
+            " ".join(getattr(a, "keywords", []) or []),
+        ]).lower()
+        for a in articles
+    )
+    if any(term in text for term in ("earthquake", "quake", "flood", "hurricane", "wildfire", "disaster")):
+        return "disaster"
+    if any(term in text for term in ("war", "attack", "missile", "invasion", "conflict")):
+        return "war_conflict"
+    return None
+
+
+def _breaking_score(ev, trusted_source_count: int, recent_article_count: int, severity_keyword_score: float) -> float:
+    # Practical Step 5 score from the simplified scorer fields plus source trust.
+    source_component = min(1.0, trusted_source_count / 2.0)
+    article_component = min(1.0, recent_article_count / 3.0)
+    return round(max(getattr(ev, "final_score", 0.0), 0.4 * severity_keyword_score + 0.3 * source_component + 0.3 * article_component), 4)
+
+
+def _apply_breaking_rules(ev, *, category: str | None, trusted_source_count: int, recent_article_count: int, severity_keyword_score: float, breaking_score: float) -> bool:
+    normal = (
+        breaking_score >= 0.75
+        and trusted_source_count >= 2
+        and recent_article_count >= 3
+        and category in BREAKING_CATEGORIES
+    )
+    relaxed = (
+        category in EXTREME_BREAKING_CATEGORIES
+        and trusted_source_count >= 1
+        and recent_article_count >= 2
+        and severity_keyword_score >= 0.8
+    )
+    return normal or relaxed
+
+
 def _persist_events(db: Session, events) -> list[EventModel]:
     repo = EventRepository(db); out = []
     for ev in events:
         event_dt = max((a.published_at for a in ev.articles), default=datetime.now(timezone.utc))
+        sources = {_source_key(a) for a in ev.articles if _source_key(a)}
+        trusted_sources = {_source_key(a) for a in ev.articles if _source_key(a) and _is_trusted_source(a)}
+        category = getattr(ev, "category", None) or _event_category(ev.articles)
+        breaking_detected_at = datetime.now(timezone.utc) if getattr(ev, "is_breaking", False) else None
         model = EventModel(
             title=ev.title,
             normalized_title=getattr(ev, "normalized_title", None) or normalize_title(ev.title),
@@ -162,17 +227,18 @@ def _persist_events(db: Session, events) -> list[EventModel]:
             last_seen_at=event_dt,
             keywords=list(ev.keywords),
             entities=ev.entities if isinstance(getattr(ev, "entities", {}), dict) else {"items": list(ev.entities)},
+            category=category,
             article_count=len(ev.articles),
-            source_count=len({getattr(a, "source_name", None) or getattr(a, "source_domain", None) for a in ev.articles if getattr(a, "source_name", None) or getattr(a, "source_domain", None)}),
-            trusted_source_count=0,
+            source_count=len(sources),
+            trusted_source_count=len(trusted_sources),
             country_count=len({getattr(a, "country", None) for a in ev.articles if getattr(a, "country", None)}),
             popular_score=ev.source_diversity_score,
             importance_score=ev.severity_score,
-            breaking_score=ev.velocity_score,
+            breaking_score=getattr(ev, "breaking_score", ev.velocity_score),
             final_score=ev.final_score,
             status="active",
             is_breaking=getattr(ev, "is_breaking", False),
-            breaking_detected_at=datetime.now(timezone.utc) if getattr(ev, "is_breaking", False) else None,
+            breaking_detected_at=breaking_detected_at,
         )
         out.append(repo.upsert_by_day_title(model, ev.articles))
     db.commit(); return out
@@ -186,11 +252,27 @@ def daily_event_job(db: Session | None = None, lookback_hours: int = 24, limit: 
     return _persist_events(db, events) if db else events
 
 
-def breaking_watch_job(db: Session | None = None, since_minutes: int = 60, *, articles: Iterable | None = None):
+def breaking_watch_job(db: Session | None = None, since_minutes: int = 60, limit: int = 20, *, articles: Iterable | None = None):
     if articles is None and db:
-        articles = ArticleRepository(db).list_recent(hours=max(1, since_minutes // 60), include_duplicates=False)
+        hours = max(1, (since_minutes + 59) // 60)
+        since = datetime.now(timezone.utc) - timedelta(minutes=since_minutes)
+        articles = [a for a in ArticleRepository(db).list_recent(hours=hours, include_duplicates=False) if a.published_at >= since]
     events = []
     for ev in [score_event(e) for e in cluster_events(list(articles or []))]:
-        ev.is_breaking = is_breaking(ev)
+        category = _event_category(ev.articles)
+        trusted_count = len({_source_key(a) for a in ev.articles if _source_key(a) and _is_trusted_source(a)})
+        recent_count = len(ev.articles)
+        severity = getattr(ev, "severity_score", 0.0)
+        ev.category = category
+        ev.breaking_score = _breaking_score(ev, trusted_count, recent_count, severity)
+        ev.is_breaking = _apply_breaking_rules(
+            ev,
+            category=category,
+            trusted_source_count=trusted_count,
+            recent_article_count=recent_count,
+            severity_keyword_score=severity,
+            breaking_score=ev.breaking_score,
+        )
         if ev.is_breaking: events.append(ev)
+    events = sorted(events, key=lambda e: (getattr(e, "breaking_score", 0.0), getattr(e, "final_score", 0.0)), reverse=True)[:limit]
     return _persist_events(db, events) if db else events

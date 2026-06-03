@@ -113,7 +113,7 @@ class EventRepository:
 
     def list_breaking(self, since_minutes: int = 180, limit: int = 20) -> list[EventModel]:
         since = datetime.now(timezone.utc) - timedelta(minutes=since_minutes)
-        return list(self.db.execute(select(EventModel).where(EventModel.is_breaking == True, EventModel.created_at >= since).order_by(EventModel.final_score.desc()).limit(limit)).scalars())
+        return list(self.db.execute(select(EventModel).where(EventModel.is_breaking == True, EventModel.breaking_detected_at >= since).order_by(EventModel.breaking_score.desc(), EventModel.final_score.desc()).limit(limit)).scalars())
 
 
 class CollectionRunRepository:

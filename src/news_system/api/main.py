@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta, date as date_type
+from datetime import date as date_type
 
 from fastapi import Depends, FastAPI
 from sqlalchemy.orm import Session
@@ -30,8 +30,7 @@ def daily(date: str, limit: int = 10, db: Session = Depends(get_db)):
 
 @app.get("/events/breaking")
 def breaking(since_minutes: int = 180, limit: int = 20, db: Session = Depends(get_db)):
-    since = datetime.now(timezone.utc) - timedelta(minutes=since_minutes)
-    events = db.query(EventModel).filter(EventModel.is_breaking == True, EventModel.created_at >= since).order_by(EventModel.final_score.desc()).limit(limit).all()
+    events = EventRepository(db).list_breaking(since_minutes=since_minutes, limit=limit)
     return events_payload(events, since_minutes=since_minutes, limit=limit)
 
 

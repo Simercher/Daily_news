@@ -44,13 +44,17 @@ def main(argv=None):
     build.add_argument("--lookback-hours", type=int, default=24)
     build.add_argument("--limit", type=int, default=10)
 
-    sub.add_parser("watch-breaking")
+    watch = sub.add_parser("watch-breaking")
+    watch.add_argument("--lookback-minutes", type=int, default=60)
+    watch.add_argument("--limit", type=int, default=20)
 
     show_daily = sub.add_parser("show-daily")
     show_daily.add_argument("--date", required=True)
     show_daily.add_argument("--limit", type=int, default=10)
 
-    sub.add_parser("show-breaking")
+    show_breaking = sub.add_parser("show-breaking")
+    show_breaking.add_argument("--since-minutes", type=int, default=180)
+    show_breaking.add_argument("--limit", type=int, default=20)
     sub.add_parser("db-smoke")
     args = p.parse_args(argv)
 
@@ -82,8 +86,20 @@ def main(argv=None):
                 db.close()
         elif args.cmd == "db-smoke":
             _json(run_db_smoke())
-        else:
-            _json({"breaking": len(breaking_watch_job(articles=[]))})
+        elif args.cmd == "watch-breaking":
+            db = _session()
+            try:
+                events = breaking_watch_job(db, since_minutes=args.lookback_minutes, limit=args.limit)
+                _json(events_payload(events, lookback_minutes=args.lookback_minutes, limit=args.limit))
+            finally:
+                db.close()
+        elif args.cmd == "show-breaking":
+            db = _session()
+            try:
+                events = EventRepository(db).list_breaking(since_minutes=args.since_minutes, limit=args.limit)
+                _json(events_payload(events, since_minutes=args.since_minutes, limit=args.limit))
+            finally:
+                db.close()
     except SourceConfigError as exc:
         print(f"source config error: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
