@@ -2,16 +2,36 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import date as date_type
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+# Auto-load repo .env BEFORE any project imports so DATABASE_URL is set
+_env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+if _env_path.exists():
+    for line in _env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" in line:
+            key, val = line.split("=", 1)
+            os.environ.setdefault(key.strip(), val.strip())
 
 from news_system.config.sources import SourceConfigError, load_sources
-from news_system.db.models import Base
+from news_system.db.models import ArticleModel, Base, EventArticle, EventModel
 from news_system.db.session import get_engine, get_session_local
 from news_system.jobs import collect_job, daily_event_job, breaking_watch_job
-from news_system.serializers import events_payload
-from news_system.storage.repositories import EventRepository
+from news_system.processors.event_fingerprint import generate_fingerprint
+from news_system.processors.fulltext import extract_articles
+from news_system.processors.fulltext_quality import compute_fulltext_quality
+from news_system.processors.representative_articles import select_representative
+from news_system.processors.scorer import score_event
+from news_system.serializers import event_to_dict, events_payload
+from news_system.storage.repositories import ArticleRepository, EventRepository
 from news_system.storage.smoke import run_db_smoke
+from sqlalchemy import delete, select, text, update
 
 
 def _json(data):
@@ -56,6 +76,26 @@ def main(argv=None):
     show_breaking.add_argument("--since-minutes", type=int, default=180)
     show_breaking.add_argument("--limit", type=int, default=20)
     sub.add_parser("db-smoke")
+
+    # --- v1.1 commands ---
+    extract_ft = sub.add_parser("extract-fulltext")
+    extract_ft.add_argument("--article-id", type=int, default=None)
+    extract_ft.add_argument("--source", type=str, default=None)
+    extract_ft.add_argument("--status", type=str, default=None)
+    extract_ft.add_argument("--lookback-hours", type=int, default=24)
+    extract_ft.add_argument("--only-missing", action="store_true", default=False)
+
+    score_ev = sub.add_parser("score-event")
+    score_ev.add_argument("--event-id", type=int, required=True)
+
+    merge_ev = sub.add_parser("merge-events")
+    merge_ev.add_argument("--source-event-id", type=int, required=True)
+    merge_ev.add_argument("--target-event-id", type=int, required=True)
+
+    split_ev = sub.add_parser("split-event")
+    split_ev.add_argument("--event-id", type=int, required=True)
+    split_ev.add_argument("--article-ids", type=str, required=True)
+
     args = p.parse_args(argv)
 
     try:
@@ -100,6 +140,345 @@ def main(argv=None):
                 _json(events_payload(events, since_minutes=args.since_minutes, limit=args.limit))
             finally:
                 db.close()
+
+        # --- v1.1 command handlers ---
+        elif args.cmd == "extract-fulltext":
+            db = _session()
+            try:
+                now = datetime.now(timezone.utc)
+                query = select(ArticleModel)
+
+                if args.article_id is not None:
+                    # Single article by ID — ignore other filters
+                    query = query.where(ArticleModel.id == args.article_id)
+                else:
+                    since = now - timedelta(hours=args.lookback_hours)
+                    query = query.where(ArticleModel.published_at >= since)
+
+                    if args.source:
+                        query = query.where(ArticleModel.source_name == args.source)
+
+                    if args.status:
+                        query = query.where(ArticleModel.fulltext_status == args.status)
+
+                    if args.only_missing:
+                        query = query.where(
+                            (ArticleModel.content_snippet == None)
+                            | (ArticleModel.content_snippet == "")
+                            | (ArticleModel.content_snippet == "ONLY AVAILABLE IN PAID PLANS")
+                        )
+
+                articles = list(db.execute(query).scalars())
+                total = len(articles)
+
+                # Run extraction (modifies articles in-place)
+                extract_articles(articles)
+
+                # Compute quality scores and finalize per-article fields
+                extracted = 0
+                skipped = 0
+                errors = 0
+                for a in articles:
+                    fts = a.fulltext_status
+                    if fts == "extracted":
+                        quality, _ = compute_fulltext_quality(
+                            a.content_snippet, status="extracted"
+                        )
+                        a.fulltext_quality_score = quality
+                        a.fulltext_extracted_at = now
+                        extracted += 1
+                    elif fts in ("error", "timeout"):
+                        quality, _ = compute_fulltext_quality(
+                            a.content_snippet, status=fts
+                        )
+                        a.fulltext_quality_score = quality
+                        a.fulltext_extracted_at = now
+                        errors += 1
+                    else:
+                        skipped += 1
+
+                db.commit()
+                _json({
+                    "cmd": "extract-fulltext",
+                    "total": total,
+                    "extracted": extracted,
+                    "skipped": skipped,
+                    "errors": errors,
+                })
+            finally:
+                db.close()
+
+        elif args.cmd == "score-event":
+            db = _session()
+            try:
+                event = db.get(EventModel, args.event_id)
+                if event is None:
+                    _json({"error": f"event {args.event_id} not found"})
+                    return
+
+                # Load articles linked to this event
+                stmt = (
+                    select(ArticleModel)
+                    .join(EventArticle, ArticleModel.id == EventArticle.article_id)
+                    .where(EventArticle.event_id == args.event_id)
+                )
+                articles = list(db.execute(stmt).scalars())
+
+                # Attach articles to the event model so score_event can read them
+                event.articles = articles
+
+                # Regenerate event fingerprint
+                entities_list = list(event.entities or {})
+                if isinstance(entities_list, dict):
+                    entities_list = list(entities_list.keys())
+                keywords_list = list(event.keywords or [])
+                event.event_fingerprint = generate_fingerprint(
+                    category=event.category,
+                    dt=event.first_seen_at,
+                    entities=entities_list,
+                    keywords=keywords_list,
+                )
+
+                # Select representative article
+                best_id, _ = select_representative(articles)
+                event.representative_article_id = best_id
+
+                # Score the event
+                score_event(event)
+
+                event.last_scored_at = datetime.now(timezone.utc)
+                db.commit()
+
+                _json({
+                    "cmd": "score-event",
+                    "event_id": event.id,
+                    "popular_score": event.popular_score,
+                    "importance_score": event.importance_score,
+                    "breaking_score": event.breaking_score,
+                    "final_score": event.final_score,
+                    "score_breakdown": event.score_breakdown,
+                    "article_count": len(articles),
+                })
+            finally:
+                db.close()
+
+        elif args.cmd == "merge-events":
+            db = _session()
+            try:
+                source = db.get(EventModel, args.source_event_id)
+                target = db.get(EventModel, args.target_event_id)
+                if source is None:
+                    _json({"error": f"source event {args.source_event_id} not found"})
+                    return
+                if target is None:
+                    _json({"error": f"target event {args.target_event_id} not found"})
+                    return
+
+                # Move all EventArticle links from source to target
+                links = list(
+                    db.execute(
+                        select(EventArticle).where(
+                            EventArticle.event_id == args.source_event_id
+                        )
+                    ).scalars()
+                )
+                moved_count = 0
+                for link in links:
+                    existing = db.get(
+                        EventArticle,
+                        {"event_id": args.target_event_id, "article_id": link.article_id},
+                    )
+                    if existing is None:
+                        new_link = EventArticle(
+                            event_id=args.target_event_id,
+                            article_id=link.article_id,
+                            relevance_score=link.relevance_score,
+                        )
+                        db.add(new_link)
+                        moved_count += 1
+
+                # Set source event status to merged and record merged_into_event_id
+                source.status = "merged"
+                source_entities = dict(source.entities or {})
+                source_entities["merged_into_event_id"] = args.target_event_id
+                source.entities = source_entities
+                db.flush()
+
+                # Re-score target event
+                stmt = (
+                    select(ArticleModel)
+                    .join(EventArticle, ArticleModel.id == EventArticle.article_id)
+                    .where(EventArticle.event_id == args.target_event_id)
+                )
+                articles = list(db.execute(stmt).scalars())
+                target.articles = articles
+                target.article_count = len(articles)
+
+                entities_list = list(target.entities or {})
+                if isinstance(entities_list, dict):
+                    entities_list = list(entities_list.keys())
+                keywords_list = list(target.keywords or [])
+                target.event_fingerprint = generate_fingerprint(
+                    category=target.category,
+                    dt=target.first_seen_at,
+                    entities=entities_list,
+                    keywords=keywords_list,
+                )
+                best_id, _ = select_representative(articles)
+                target.representative_article_id = best_id
+                score_event(target)
+                target.last_scored_at = datetime.now(timezone.utc)
+                db.commit()
+
+                _json({
+                    "cmd": "merge-events",
+                    "source_event_id": args.source_event_id,
+                    "target_event_id": args.target_event_id,
+                    "moved_articles": moved_count,
+                    "target_article_count": target.article_count,
+                    "final_score": target.final_score,
+                })
+            finally:
+                db.close()
+
+        elif args.cmd == "split-event":
+            db = _session()
+            try:
+                source_event = db.get(EventModel, args.event_id)
+                if source_event is None:
+                    _json({"error": f"event {args.event_id} not found"})
+                    return
+
+                try:
+                    split_ids = [
+                        int(x.strip()) for x in args.article_ids.split(",") if x.strip()
+                    ]
+                except ValueError:
+                    _json({"error": "invalid --article-ids; must be comma-separated integers"})
+                    return
+
+                if not split_ids:
+                    _json({"error": "no article IDs provided"})
+                    return
+
+                # Verify all article IDs actually belong to this event
+                existing_links = list(
+                    db.execute(
+                        select(EventArticle).where(
+                            EventArticle.event_id == args.event_id,
+                            EventArticle.article_id.in_(split_ids),
+                        )
+                    ).scalars()
+                )
+                found_ids = {l.article_id for l in existing_links}
+                missing = [aid for aid in split_ids if aid not in found_ids]
+                if missing:
+                    _json({
+                        "error": f"articles {missing} not found in event {args.event_id}",
+                    })
+                    return
+
+                # Load the articles being split off
+                split_articles = list(
+                    db.execute(
+                        select(ArticleModel).where(ArticleModel.id.in_(split_ids))
+                    ).scalars()
+                )
+
+                # Remove article links from source event
+                db.execute(
+                    delete(EventArticle).where(
+                        EventArticle.event_id == args.event_id,
+                        EventArticle.article_id.in_(split_ids),
+                    )
+                )
+                db.flush()
+
+                # Create new event for the split articles
+                event_date = (
+                    max(a.published_at for a in split_articles).date()
+                    if split_articles
+                    else source_event.event_date
+                )
+                title = split_articles[0].title if split_articles else source_event.title
+                new_event = EventModel(
+                    title=title,
+                    normalized_title=split_articles[0].normalized_title if split_articles else source_event.normalized_title,
+                    event_date=event_date,
+                    category=source_event.category,
+                    status="active",
+                    keywords=list(source_event.keywords or []),
+                    entities=dict(source_event.entities or {}),
+                )
+                db.add(new_event)
+                db.flush()
+
+                # Link split articles to new event
+                for aid in split_ids:
+                    link = EventArticle(
+                        event_id=new_event.id,
+                        article_id=aid,
+                        relevance_score=1.0,
+                    )
+                    db.add(link)
+                db.flush()
+
+                # Re-score both events
+                source_articles = list(
+                    db.execute(
+                        select(ArticleModel)
+                        .join(EventArticle, ArticleModel.id == EventArticle.article_id)
+                        .where(EventArticle.event_id == args.event_id)
+                    ).scalars()
+                )
+                source_event.articles = source_articles
+                source_event.article_count = len(source_articles)
+                entities_list = list(source_event.entities or {})
+                if isinstance(entities_list, dict):
+                    entities_list = list(entities_list.keys())
+                keywords_list = list(source_event.keywords or [])
+                source_event.event_fingerprint = generate_fingerprint(
+                    category=source_event.category,
+                    dt=source_event.first_seen_at,
+                    entities=entities_list,
+                    keywords=keywords_list,
+                )
+                best_id, _ = select_representative(source_articles)
+                source_event.representative_article_id = best_id
+                score_event(source_event)
+                source_event.last_scored_at = datetime.now(timezone.utc)
+
+                new_event.articles = split_articles
+                new_event.article_count = len(split_articles)
+                entities_list2 = list(new_event.entities or {})
+                if isinstance(entities_list2, dict):
+                    entities_list2 = list(entities_list2.keys())
+                keywords_list2 = list(new_event.keywords or [])
+                new_event.event_fingerprint = generate_fingerprint(
+                    category=new_event.category,
+                    dt=new_event.first_seen_at or event_date,
+                    entities=entities_list2,
+                    keywords=keywords_list2,
+                )
+                best_id2, _ = select_representative(split_articles)
+                new_event.representative_article_id = best_id2
+                score_event(new_event)
+                new_event.last_scored_at = datetime.now(timezone.utc)
+
+                db.commit()
+
+                _json({
+                    "cmd": "split-event",
+                    "source_event_id": args.event_id,
+                    "new_event_id": new_event.id,
+                    "split_article_count": len(split_ids),
+                    "source_article_count": source_event.article_count,
+                    "source_final_score": source_event.final_score,
+                    "new_event_final_score": new_event.final_score,
+                })
+            finally:
+                db.close()
+
     except SourceConfigError as exc:
         print(f"source config error: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
