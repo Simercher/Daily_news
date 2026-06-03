@@ -40,7 +40,9 @@ def _to_model(a) -> ArticleModel:
 
 def _collector_for_source(src: SourceConfig):
     if src.source_type == "rss": collector = RSSCollector(src.url or "", source_name=src.name)
-    elif src.source_type == "newsapi": collector = NewsAPICollector(src.params.get("api_key", ""), endpoint=src.params.get("endpoint", "top-headlines"), base_url=src.base_url or "https://newsapi.org/v2")
+    elif src.source_type == "newsapi":
+        api_key_env = src.params.get("api_key_env") or ("NEWSAPI_API_KEY" if not src.params.get("api_key") else None)
+        collector = NewsAPICollector(src.params.get("api_key"), endpoint=src.params.get("endpoint", "top-headlines"), base_url=src.base_url or "https://newsapi.org/v2", api_key_env=api_key_env)
     elif src.source_type == "gdelt": collector = GDELTCollector(base_url=src.base_url or "https://api.gdeltproject.org/api/v2/doc/doc")
     else: raise ValueError(f"unsupported source_type: {src.source_type}")
     collector.source_config = src

@@ -18,6 +18,36 @@ sources:
     category: world
     url: https://www.reutersagency.com/feed/?best-topics=world&post_type=best
 
+  - name: NewsAPI Top Headlines Example
+    source_type: newsapi
+    enabled: false
+    trusted: false
+    priority: 50
+    language: en
+    country: us
+    category: general
+    query: world
+    base_url: https://newsapi.org/v2
+    params:
+      endpoint: top-headlines
+      api_key_env: NEWSAPI_API_KEY
+      pageSize: 50
+
+  - name: NewsAPI Everything Example
+    source_type: newsapi
+    enabled: false
+    trusted: false
+    priority: 55
+    language: en
+    category: world
+    query: climate OR economy
+    base_url: https://newsapi.org/v2
+    params:
+      endpoint: everything
+      api_key_env: NEWSAPI_API_KEY
+      sortBy: publishedAt
+      pageSize: 50
+
   - name: GDELT Disaster Monitor
     source_type: gdelt
     enabled: false
@@ -30,3 +60,6 @@ sources:
     params:
       mode: ArtList
       format: json
+      timespan: 1d
+      maxrecords: 50
+      sort: HybridRel
