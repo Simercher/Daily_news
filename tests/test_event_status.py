@@ -35,7 +35,9 @@ def engine():
     e = create_engine(_pg_url, future=True)
     Base.metadata.create_all(e)
     yield e
-    Base.metadata.drop_all(e)
+    # Do not drop the shared PostgreSQL schema here. Tests use per-test
+    # transactions with rollback; dropping all tables breaks later integration
+    # smoke tests that expect the migrated schema to remain present.
     e.dispose()
 
 

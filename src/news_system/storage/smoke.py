@@ -46,10 +46,12 @@ def run_db_smoke(db: Session | None = None) -> dict:
                 """
                 INSERT INTO news_sources
                     (source_type, name, domain, url, country, language, category,
-                     trusted, enabled, priority, created_at, updated_at)
+                     trusted, enabled, priority, credibility_score, region,
+                     ownership_type, source_notes, created_at, updated_at)
                 VALUES
                     (:source_type, :name, :domain, :url, :country, :language, :category,
-                     :trusted, :enabled, :priority, :now, :now)
+                     :trusted, :enabled, :priority, :credibility_score, :region,
+                     :ownership_type, :source_notes, :now, :now)
                 RETURNING id
                 """
             ),
@@ -64,6 +66,10 @@ def run_db_smoke(db: Session | None = None) -> dict:
                 "trusted": True,
                 "enabled": True,
                 "priority": 1,
+                "credibility_score": 0.95,
+                "region": "global",
+                "ownership_type": "test",
+                "source_notes": "Inserted by daily-news db-smoke.",
                 "now": now,
             },
         ).scalar_one()
@@ -75,12 +81,14 @@ def run_db_smoke(db: Session | None = None) -> dict:
                     (external_id, source_type, source_name, source_domain, title,
                      normalized_title, description, content_snippet, url, canonical_url,
                      url_hash, language, country, category, published_at, collected_at,
-                     raw_payload, title_hash, content_hash, is_duplicate, created_at, updated_at)
+                     raw_payload, title_hash, content_hash, is_duplicate,
+                     fulltext_status, fulltext_quality_score, created_at, updated_at)
                 VALUES
                     (:external_id, 'rss', :source_name, 'example.invalid', :title,
                      :normalized_title, :description, :content_snippet, :url, :canonical_url,
                      :url_hash, 'en', 'WW', 'smoke', :now, :now,
-                     CAST(:raw_payload AS jsonb), :title_hash, :content_hash, FALSE, :now, :now)
+                     CAST(:raw_payload AS jsonb), :title_hash, :content_hash, FALSE,
+                     'extracted', 0.8, :now, :now)
                 RETURNING id
                 """
             ),
@@ -109,12 +117,15 @@ def run_db_smoke(db: Session | None = None) -> dict:
                      first_seen_at, last_seen_at, article_count, source_count,
                      trusted_source_count, country_count, popular_score, importance_score,
                      breaking_score, final_score, status, is_breaking, breaking_detected_at,
-                     keywords, entities, created_at, updated_at)
+                     keywords, entities, event_fingerprint, score_breakdown,
+                     last_scored_at, cluster_method, created_at, updated_at)
                 VALUES
                     (:title, :normalized_title, 'smoke', 'low', CURRENT_DATE,
                      :now, :now, 1, 1, 1, 1, 1.0, 1.0,
                      1.0, 1.0, 'active', TRUE, :now,
-                     ARRAY['db-smoke']::TEXT[], CAST(:entities AS jsonb), :now, :now)
+                     ARRAY['db-smoke']::TEXT[], CAST(:entities AS jsonb),
+                     :event_fingerprint, CAST(:score_breakdown AS jsonb),
+                     :now, 'db-smoke', :now, :now)
                 RETURNING id
                 """
             ),
@@ -122,6 +133,8 @@ def run_db_smoke(db: Session | None = None) -> dict:
                 "title": f"Daily News smoke event {suffix}",
                 "normalized_title": "daily news smoke event",
                 "entities": '{"smoke": true}',
+                "event_fingerprint": f"smoke|{suffix}",
+                "score_breakdown": '{"smoke": true}',
                 "now": now,
             },
         ).scalar_one()
