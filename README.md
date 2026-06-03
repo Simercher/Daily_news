@@ -56,12 +56,25 @@ Available commands:
 
 ```bash
 UV_PROJECT_ENVIRONMENT=.venv uv run daily-news collect --source all --lookback-hours 1
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news sources validate
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news sources list
 UV_PROJECT_ENVIRONMENT=.venv uv run daily-news build-events
 UV_PROJECT_ENVIRONMENT=.venv uv run daily-news watch-breaking
 UV_PROJECT_ENVIRONMENT=.venv uv run daily-news show-daily
 UV_PROJECT_ENVIRONMENT=.venv uv run daily-news show-breaking
 UV_PROJECT_ENVIRONMENT=.venv uv run daily-news db-smoke
 ```
+
+`config/sources.yaml` is the single entry point for collection sources. It uses a top-level `sources:` list with `name`, `source_type` (`rss`, `newsapi`, `gdelt`), `enabled`, URL/query metadata, trust/priority, country/category/language, and optional `domain`, `base_url`, and `params`. `daily-news collect --source all|rss|newsapi|gdelt|<name>` loads this file and collects only enabled sources.
+
+RSS collection writes to the configured SQLAlchemy database (`DATABASE_URL` / `SessionLocal`), normalizes/canonicalizes URLs, filters articles older than `--lookback-hours`, upserts by the unique `url_hash`, persists `news_sources` trust/priority metadata, records `collection_runs`, and prints JSON stats (`fetched`, `inserted`, `duplicates`, per-source counts, and errors):
+
+```bash
+DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_news' \
+  UV_PROJECT_ENVIRONMENT=.venv uv run daily-news collect --source rss --lookback-hours 24
+```
+
+If PostgreSQL runs on the host from inside a container, `localhost` may point at the container rather than the host; set `DATABASE_URL` to the reachable host name/IP (for example `host.docker.internal` where supported).
 
 ## API
 

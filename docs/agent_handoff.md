@@ -92,6 +92,8 @@ Current subcommands:
 
 ```bash
 UV_PROJECT_ENVIRONMENT=.venv uv run daily-news collect --source all --lookback-hours 1
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news sources validate
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news sources list
 UV_PROJECT_ENVIRONMENT=.venv uv run daily-news build-events
 UV_PROJECT_ENVIRONMENT=.venv uv run daily-news watch-breaking
 UV_PROJECT_ENVIRONMENT=.venv uv run daily-news show-daily
@@ -99,7 +101,16 @@ UV_PROJECT_ENVIRONMENT=.venv uv run daily-news show-breaking
 UV_PROJECT_ENVIRONMENT=.venv uv run daily-news db-smoke
 ```
 
-Current CLI output is compact JSON for job results.
+Current CLI output is compact JSON for job results. `config/sources.yaml` is the single source configuration entry point; `sources validate/list` check and show the normalized source schema, and `collect` only builds collectors for enabled config entries.
+
+RSS collection path to verify Step 3:
+
+```bash
+DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_news' \
+  UV_PROJECT_ENVIRONMENT=.venv uv run daily-news collect --source rss --lookback-hours 24
+```
+
+Expected JSON includes top-level `fetched`, `inserted`, `duplicates`, `filtered_old`, `source_counts`, and `errors`. Collection uses `DATABASE_URL`/`SessionLocal`, writes `news_sources` metadata (`trusted`, `priority`, etc.), records `collection_runs`, normalizes/canonicalizes URLs, and upserts by unique `url_hash`. The current no-explicit-session CLI path calls `Base.metadata.create_all(engine)` before opening a session; this is convenient for SQLite/dev smoke runs but production PostgreSQL should still be managed with Alembic migrations and an explicitly verified `DATABASE_URL`/schema. If running inside a container, do not assume PostgreSQL on the host is reachable at `localhost`; set `DATABASE_URL` to the actual reachable host/IP.
 
 For PostgreSQL verification, set `DATABASE_URL` explicitly and run `daily-news db-smoke`. The smoke command verifies required tables and inserts a unique source/article/event/link/collection run. `tests/test_postgres_integration.py` calls the same function and skips unless `DATABASE_URL` is present.
 

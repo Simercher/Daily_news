@@ -7,8 +7,11 @@ from news_system.storage.smoke import run_db_smoke
 
 @pytest.mark.integration
 def test_postgres_db_smoke_requires_database_url():
-    if not os.getenv("DATABASE_URL"):
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
         pytest.skip("DATABASE_URL is not set; skipping PostgreSQL integration smoke test")
+    if not database_url.startswith(("postgresql://", "postgresql+psycopg://")):
+        pytest.skip("DATABASE_URL is not PostgreSQL; skipping PostgreSQL integration smoke test")
 
     result = run_db_smoke()
 

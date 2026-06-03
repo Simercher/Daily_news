@@ -19,5 +19,5 @@ data/logs/*
 external/
 docs/change_log_*.md
 docs/spec*.md
-docs/todo.md
+docs/TODO*.md
 

@@ -1,7 +1,32 @@
-rss:
-  - name: Example
-    url: https://example.com/rss.xml
-newsapi:
-  base_url: https://newsapi.org/v2
-gdelt:
-  base_url: https://api.gdeltproject.org/api/v2/doc/doc
+sources:
+  - name: BBC World
+    source_type: rss
+    enabled: true
+    trusted: true
+    priority: 10
+    language: en
+    country: gb
+    category: world
+    url: https://feeds.bbci.co.uk/news/world/rss.xml
+
+  - name: Reuters World
+    source_type: rss
+    enabled: false
+    trusted: true
+    priority: 10
+    language: en
+    category: world
+    url: https://www.reutersagency.com/feed/?best-topics=world&post_type=best
+
+  - name: GDELT Disaster Monitor
+    source_type: gdelt
+    enabled: false
+    trusted: false
+    priority: 60
+    language: en
+    category: world
+    base_url: https://api.gdeltproject.org/api/v2/doc/doc
+    query: disaster OR earthquake OR flood
+    params:
+      mode: ArtList
+      format: json

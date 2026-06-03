@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Iterable
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from news_system.db.models import ArticleModel, CollectionRun, EventArticle, EventModel, NewsSource
-from news_system.processors.normalizer import canonicalize_url, normalize_title, url_hash
+from news_system.processors.normalizer import canonicalize_url, content_hash, normalize_title, title_hash, url_hash
 
 
 class SourceRepository:
@@ -35,6 +35,8 @@ class ArticleRepository:
         article.canonical_url = article.canonical_url or canonicalize_url(article.url)
         article.url_hash = article.url_hash or url_hash(article.url)
         article.normalized_title = article.normalized_title or normalize_title(article.title)
+        article.title_hash = article.title_hash or title_hash(article.title)
+        article.content_hash = article.content_hash or content_hash(article.content_snippet or article.description)
         if article.published_at.tzinfo is None:
             article.published_at = article.published_at.replace(tzinfo=timezone.utc)
         return article
@@ -74,6 +76,28 @@ class EventRepository:
         for article in articles: self.link_article(event.id, article.id)
         self.db.flush(); return event
 
+    def upsert_by_day_title(self, event: EventModel, articles: Iterable[ArticleModel] = ()) -> EventModel:
+        existing = self.db.execute(
+            select(EventModel).where(
+                EventModel.event_date == event.event_date,
+                EventModel.normalized_title == event.normalized_title,
+            )
+        ).scalar_one_or_none()
+        if existing is None:
+            return self.add(event, articles)
+        for name in (
+            "title", "category", "severity", "first_seen_at", "last_seen_at", "article_count",
+            "source_count", "trusted_source_count", "country_count", "popular_score",
+            "importance_score", "breaking_score", "final_score", "status", "is_breaking",
+            "breaking_detected_at", "keywords", "entities",
+        ):
+            setattr(existing, name, getattr(event, name))
+        self.db.execute(delete(EventArticle).where(EventArticle.event_id == existing.id))
+        self.db.flush()
+        for article in articles:
+            self.link_article(existing.id, article.id)
+        self.db.flush(); return existing
+
     def link_article(self, event_id: int, article_id: int, relevance_score: float = 1.0) -> EventArticle:
         link = self.db.get(EventArticle, {"event_id": event_id, "article_id": article_id})
         if link is None:
@@ -83,7 +107,7 @@ class EventRepository:
             link.relevance_score = relevance_score
         self.db.flush(); return link
 
-    def list_daily(self, date: datetime, limit: int = 10) -> list[EventModel]:
+    def list_daily(self, date: datetime | date, limit: int = 10) -> list[EventModel]:
         event_day = date.date() if isinstance(date, datetime) else date
         return list(self.db.execute(select(EventModel).where(EventModel.event_date == event_day).order_by(EventModel.final_score.desc()).limit(limit)).scalars())
 

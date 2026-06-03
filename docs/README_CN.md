@@ -56,12 +56,25 @@ UV_PROJECT_ENVIRONMENT=.venv uv run daily-news --help
 
 ```bash
 UV_PROJECT_ENVIRONMENT=.venv uv run daily-news collect --source all --lookback-hours 1
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news sources validate
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news sources list
 UV_PROJECT_ENVIRONMENT=.venv uv run daily-news build-events
 UV_PROJECT_ENVIRONMENT=.venv uv run daily-news watch-breaking
 UV_PROJECT_ENVIRONMENT=.venv uv run daily-news show-daily
 UV_PROJECT_ENVIRONMENT=.venv uv run daily-news show-breaking
 UV_PROJECT_ENVIRONMENT=.venv uv run daily-news db-smoke
 ```
+
+`config/sources.yaml` 是 collection sources 的唯一入口。格式為 top-level `sources:` list，包含 `name`、`source_type`（`rss`、`newsapi`、`gdelt`）、`enabled`、URL/query metadata、trust/priority、country/category/language，以及可選的 `domain`、`base_url`、`params`。`daily-news collect --source all|rss|newsapi|gdelt|<name>` 會讀取此檔，且只收集 enabled sources。
+
+RSS collection 會寫入設定的 SQLAlchemy database（`DATABASE_URL` / `SessionLocal`），正規化與 canonicalize URL、過濾早於 `--lookback-hours` 的文章、用唯一 `url_hash` upsert 去重、保存 `news_sources` 的 trusted/priority metadata、記錄 `collection_runs`，並輸出 JSON 統計（`fetched`、`inserted`、`duplicates`、各 source counts、errors）：
+
+```bash
+DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_news' \
+  UV_PROJECT_ENVIRONMENT=.venv uv run daily-news collect --source rss --lookback-hours 24
+```
+
+如果 PostgreSQL 是跑在 host 而 CLI 在 container 內執行，`localhost` 可能指向 container 本身；請將 `DATABASE_URL` 改成可連到 host 的名稱/IP（例如環境支援時使用 `host.docker.internal`）。
 
 ## API
 

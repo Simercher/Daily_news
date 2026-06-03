@@ -18,6 +18,19 @@ def canonicalize_url(url: str) -> str:
 def url_hash(url: str) -> str:
     return hashlib.sha256(canonicalize_url(url).encode()).hexdigest()
 
+
+def stable_hash(value: str | None) -> str:
+    return hashlib.sha256((value or "").strip().encode()).hexdigest()
+
+
+def title_hash(title: str | None) -> str:
+    return stable_hash(normalize_title(title or ""))
+
+
+def content_hash(content: str | None) -> str:
+    return stable_hash(content or "")
+
+
 def normalize_title(title: str) -> str:
     s = unicodedata.normalize("NFKC", title or "").lower()
     s = SOURCE_SUFFIX_RE.sub("", s)

@@ -4,7 +4,9 @@ from pydantic import BaseModel, Field
 
 class Article(BaseModel):
     source_id: str | None = None
+    source_type: str = "rss"
     source_name: str | None = None
+    source_domain: str | None = None
     title: str
     url: str
     published_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
