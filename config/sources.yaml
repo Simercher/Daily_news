@@ -1,7 +1,7 @@
 sources:
 - name: Reuters News Sitemap
   source_type: sitemap
-  enabled: false
+  enabled: true
   trusted: true
   priority: 10
   language: en
