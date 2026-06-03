@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import ARRAY, BigInteger, Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -28,6 +28,10 @@ class NewsSource(Base):
     trusted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    credibility_score: Mapped[float] = mapped_column(Float, default=0.5)
+    region: Mapped[str | None] = mapped_column(String(64))
+    ownership_type: Mapped[str | None] = mapped_column(String(64))
+    source_notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
 
@@ -67,6 +71,12 @@ class ArticleModel(Base):
     duplicate_of_article_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("articles.id", ondelete="SET NULL"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+    # fulltext_status is VARCHAR(32), not an enum. Valid values:
+    # not_attempted, extracted, partial, empty, blocked, timeout, error, paywalled
+    fulltext_status: Mapped[str | None] = mapped_column(String(32), default="not_attempted")
+    fulltext_quality_score: Mapped[float] = mapped_column(Float, default=0.0)
+    fulltext_extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    fulltext_error_message: Mapped[str | None] = mapped_column(Text)
 
     duplicate_of: Mapped["ArticleModel | None"] = relationship("ArticleModel", remote_side=[id])
 
@@ -151,13 +161,23 @@ class EventModel(Base):
     importance_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     breaking_score: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     final_score: Mapped[float] = mapped_column(Float, nullable=False, default=0, index=True)
+    # status is VARCHAR(32). Valid values: active, breaking, archived, merged, ignored
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
     is_breaking: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
     breaking_detected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    keywords: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    keywords: Mapped[list] = mapped_column(ARRAY(String).with_variant(JSON, "sqlite"), nullable=False, default=list)
     entities: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+    event_fingerprint: Mapped[str | None] = mapped_column(Text)
+    score_breakdown: Mapped[dict] = mapped_column(JSON, default=dict)
+    representative_article_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("articles.id", ondelete="SET NULL"))
+    last_scored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cluster_method: Mapped[str | None] = mapped_column(String(64))
+
+    representative_article: Mapped["ArticleModel | None"] = relationship("ArticleModel", foreign_keys=[representative_article_id])
+    breaking_alert_states = relationship("BreakingAlertState", back_populates="event", cascade="all, delete-orphan")
 
     @property
     def velocity_score(self) -> float:
@@ -228,3 +248,24 @@ class CollectionRun(Base):
     @error.setter
     def error(self, value: str | None) -> None:
         self.error_message = value
+
+
+class BreakingAlertState(Base):
+    __tablename__ = "breaking_alert_states"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("events.id", ondelete="CASCADE"), nullable=False, index=True)
+    first_detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_alerted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    alert_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_breaking_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    max_breaking_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    last_trusted_source_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_article_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # status is VARCHAR(32). Valid values: active, cooldown, updated, resolved, ignored
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc, onupdate=now_utc)
+
+    event = relationship("EventModel", back_populates="breaking_alert_states")

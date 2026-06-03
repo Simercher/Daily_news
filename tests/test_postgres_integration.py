@@ -1,6 +1,18 @@
+"""PostgreSQL integration smoke test. Loads .env before import."""
 import os
+from pathlib import Path
 
 import pytest
+
+# Load .env BEFORE importing anything from news_system.db.session
+# (so engine/SessionLocal are initialized with the correct host)
+_env_path = Path(__file__).resolve().parent.parent / ".env"
+if _env_path.exists():
+    for line in _env_path.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip())
 
 from news_system.storage.smoke import run_db_smoke
 
@@ -22,6 +34,7 @@ def test_postgres_db_smoke_requires_database_url():
         "events",
         "event_articles",
         "collection_runs",
+        "breaking_alert_states",
     }
     assert result["inserted"]["news_source_id"] > 0
     assert result["inserted"]["article_id"] > 0

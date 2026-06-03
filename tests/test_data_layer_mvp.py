@@ -31,9 +31,9 @@ def test_create_all_creates_required_tables():
 
 def test_sqlalchemy_metadata_matches_target_schema_columns():
     expected = {
-        "news_sources": {"id", "source_type", "name", "domain", "url", "country", "language", "category", "trusted", "enabled", "priority", "created_at", "updated_at"},
-        "articles": {"id", "external_id", "source_type", "source_name", "source_domain", "title", "normalized_title", "description", "content_snippet", "url", "canonical_url", "url_hash", "language", "country", "category", "published_at", "collected_at", "raw_payload", "title_hash", "content_hash", "is_duplicate", "duplicate_of_article_id", "created_at", "updated_at"},
-        "events": {"id", "title", "normalized_title", "category", "severity", "event_date", "first_seen_at", "last_seen_at", "article_count", "source_count", "trusted_source_count", "country_count", "popular_score", "importance_score", "breaking_score", "final_score", "status", "is_breaking", "breaking_detected_at", "keywords", "entities", "created_at", "updated_at"},
+        "news_sources": {"id", "source_type", "name", "domain", "url", "country", "language", "category", "trusted", "enabled", "priority", "credibility_score", "region", "ownership_type", "source_notes", "created_at", "updated_at"},
+        "articles": {"id", "external_id", "source_type", "source_name", "source_domain", "title", "normalized_title", "description", "content_snippet", "url", "canonical_url", "url_hash", "language", "country", "category", "published_at", "collected_at", "raw_payload", "title_hash", "content_hash", "is_duplicate", "duplicate_of_article_id", "created_at", "updated_at", "fulltext_status", "fulltext_quality_score", "fulltext_extracted_at", "fulltext_error_message"},
+        "events": {"id", "title", "normalized_title", "category", "severity", "event_date", "first_seen_at", "last_seen_at", "article_count", "source_count", "trusted_source_count", "country_count", "popular_score", "importance_score", "breaking_score", "final_score", "status", "is_breaking", "breaking_detected_at", "keywords", "entities", "event_fingerprint", "score_breakdown", "representative_article_id", "last_scored_at", "cluster_method", "created_at", "updated_at"},
         "event_articles": {"event_id", "article_id", "relevance_score", "is_representative", "created_at"},
         "collection_runs": {"id", "source_type", "source_name", "started_at", "finished_at", "status", "lookback_hours", "fetched_count", "inserted_count", "duplicate_count", "error_count", "error_message", "metadata", "created_at", "updated_at"},
     }
@@ -45,6 +45,8 @@ def test_migration_file_contains_required_table_ops():
     migration = Path("alembic/versions/0001_create_news_tables.py").read_text()
     for table in ["news_sources", "articles", "events", "event_articles", "collection_runs"]:
         assert f'op.create_table("{table}"' in migration
+    migration2 = Path("alembic/versions/0002_v1_1_enhancements.py").read_text()
+    assert 'op.create_table("breaking_alert_states"' in migration2
 
 
 def test_repositories_insert_list_link():

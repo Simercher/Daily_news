@@ -6,7 +6,7 @@ from uuid import uuid4
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
-from news_system.db.session import SessionLocal, engine
+from news_system.db.session import get_session_local, get_engine
 
 REQUIRED_TABLES = [
     "articles",
@@ -14,6 +14,7 @@ REQUIRED_TABLES = [
     "events",
     "event_articles",
     "collection_runs",
+    "breaking_alert_states",
 ]
 
 
@@ -25,12 +26,12 @@ def run_db_smoke(db: Session | None = None) -> dict:
     swallowed so callers/CLI/tests get a real failure and non-zero exit.
     """
     owns_session = db is None
-    session = db or SessionLocal()
+    session = db or get_session_local()()
     suffix = uuid4().hex
     now = datetime.now(timezone.utc)
 
     try:
-        inspector = inspect(engine if owns_session else session.get_bind())
+        inspector = inspect(get_engine() if owns_session else session.get_bind())
         existing_tables = set(inspector.get_table_names(schema="public"))
         missing_tables = [table for table in REQUIRED_TABLES if table not in existing_tables]
         if missing_tables:
