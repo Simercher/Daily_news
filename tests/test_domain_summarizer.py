@@ -406,6 +406,27 @@ class TestBuildDomainSummaries:
         result = build_domain_summaries(classified)
         assert result["international"]["articles"][0]["source"] == "unknown"
 
+    def test_scrapling_fallback_dates_are_excluded_when_dated_articles_available(self):
+        fallback_newest = make_article(
+            title="Undated scraped page should not sort as latest",
+            category="world",
+            published_at=datetime(2026, 6, 3, 12, 0, tzinfo=timezone.utc),
+        )
+        fallback_newest.source_type = "scrapling"
+        fallback_newest.raw_payload = {"date_parse_status": "missing", "date_source": "fallback_sentinel"}
+        parsed_older = make_article(
+            title="Parsed dated article should remain eligible",
+            category="world",
+            published_at=datetime(2026, 6, 2, 12, 0, tzinfo=timezone.utc),
+        )
+        parsed_older.source_type = "scrapling"
+        parsed_older.raw_payload = {"date_parse_status": "parsed", "date_source": "page_metadata"}
+
+        result = build_domain_summaries({"international": [fallback_newest, parsed_older]}, max_articles=1)
+
+        assert result["international"]["count"] == 1
+        assert result["international"]["articles"][0]["title"] == "Parsed dated article should remain eligible"
+
 
 # ---------------------------------------------------------------------------
 # Tests: format_for_discord

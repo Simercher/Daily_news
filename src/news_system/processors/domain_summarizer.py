@@ -332,6 +332,15 @@ def classify_articles(articles) -> Dict[str, list]:
     return classify_articles_with_llm(articles, llm_classifier=None)
 
 
+def _is_scrapling_fallback_date(article) -> bool:
+    raw = getattr(article, "raw_payload", None) or getattr(article, "raw", None) or {}
+    return (
+        getattr(article, "source_type", None) == "scrapling"
+        and raw.get("date_parse_status") != "parsed"
+        and raw.get("date_source") in {"fallback_sentinel", "collected_at", "fallback_collected_at"}
+    )
+
+
 def build_domain_summaries(classified: Dict[str, list], max_articles=25) -> Dict[str, dict]:
     """
     Build structured summaries per domain.
@@ -367,8 +376,10 @@ def build_domain_summaries(classified: Dict[str, list], max_articles=25) -> Dict
             continue
 
         summaries = []
+        recency_articles = [a for a in articles if not _is_scrapling_fallback_date(a)]
+        sortable_articles = recency_articles or articles
         sorted_articles = sorted(
-            articles,
+            sortable_articles,
             key=lambda a: getattr(a, "published_at", datetime.now(timezone.utc)) or datetime.now(timezone.utc),
             reverse=True,
         )

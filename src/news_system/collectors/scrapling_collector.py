@@ -5,6 +5,7 @@ import re
 from datetime import datetime, timezone
 from urllib.parse import urljoin, urlparse
 
+from dateutil import parser as date_parser
 from patchright.sync_api import sync_playwright
 
 from news_system.collectors import BaseCollector
@@ -13,6 +14,7 @@ from news_system.schemas import Article
 logger = logging.getLogger(__name__)
 
 CHROME_PATH = "/opt/data/.cache/patchright/chromium-1223/chrome-linux/chrome"
+UNKNOWN_PUBLISHED_AT_SENTINEL = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 # Common URL patterns that indicate a news article (relative paths or pattern substrings)
 ARTICLE_PATH_PATTERNS = [
@@ -28,6 +30,8 @@ ARTICLE_PATH_PATTERNS = [
 
 
 class ScraplingPlaywrightCollector(BaseCollector):
+    UNKNOWN_PUBLISHED_AT_SENTINEL = UNKNOWN_PUBLISHED_AT_SENTINEL
+
     """Scrape article headlines and summaries from websites using Playwright
     (via patchright).  Useful for news sites that serve JS-rendered content
     and do not expose a public RSS feed."""
@@ -94,6 +98,74 @@ class ScraplingPlaywrightCollector(BaseCollector):
                 if len(text) > 60:
                     return text
         return None
+
+    @staticmethod
+    def _parse_datetime(value: str | None) -> datetime | None:
+        if not value or not value.strip():
+            return None
+        try:
+            dt = date_parser.parse(value.strip(), fuzzy=True)
+        except (ValueError, TypeError, OverflowError):
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+
+    @staticmethod
+    def _extract_published_at(page) -> tuple[datetime | None, str | None]:
+        """Extract an article publication date, if one exists on the page."""
+        meta_selector = (
+            "meta[property='article:published_time'], meta[name='article:published_time'], "
+            "meta[name='pubdate'], meta[name='publishdate'], meta[name='date'], "
+            "meta[itemprop='datePublished']"
+        )
+        for el in page.query_selector_all(meta_selector):
+            for attr in ("content", "datetime"):
+                dt = ScraplingPlaywrightCollector._parse_datetime(el.get_attribute(attr))
+                if dt is not None:
+                    return dt, "page_metadata"
+
+        for selector, source in (("time[datetime]", "time_datetime"), ("time", "time_text")):
+            for el in page.query_selector_all(selector):
+                dt = ScraplingPlaywrightCollector._parse_datetime(
+                    el.get_attribute("datetime") or el.inner_text()
+                )
+                if dt is not None:
+                    return dt, source
+        return None, None
+
+    @staticmethod
+    def _build_article(
+        *,
+        title: str,
+        url: str,
+        summary: str | None,
+        source_name: str | None,
+        parsed_published_at: datetime | None,
+        date_source: str | None,
+        collected_at: datetime,
+    ) -> Article:
+        if parsed_published_at is None:
+            published_at = UNKNOWN_PUBLISHED_AT_SENTINEL
+            date_parse_status = "missing"
+            date_source = "fallback_sentinel"
+        else:
+            published_at = parsed_published_at
+            date_parse_status = "parsed"
+
+        return Article(
+            title=title,
+            url=url,
+            published_at=published_at,
+            description=summary,
+            source_name=source_name,
+            source_type="scrapling",
+            raw={
+                "date_parse_status": date_parse_status,
+                "date_source": date_source,
+                "collected_at": collected_at.isoformat(),
+            },
+        )
 
     # ------------------------------------------------------------------
     # Article-link discovery
@@ -192,12 +264,15 @@ class ScraplingPlaywrightCollector(BaseCollector):
                         summary = self._extract_summary(page)
 
                         if title:
-                            articles.append(Article(
+                            parsed_published_at, date_source = self._extract_published_at(page)
+                            articles.append(self._build_article(
                                 title=title,
                                 url=url,
-                                published_at=datetime.now(timezone.utc),
-                                description=summary,
+                                summary=summary,
                                 source_name=self.source_name,
+                                parsed_published_at=parsed_published_at,
+                                date_source=date_source,
+                                collected_at=datetime.now(timezone.utc),
                             ))
                             logger.debug("Scraped: %s", title[:80])
                     except Exception as exc:
