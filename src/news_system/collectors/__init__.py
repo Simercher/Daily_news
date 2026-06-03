@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 import os
+import time
 
 import feedparser, httpx
 from news_system.schemas import Article
@@ -74,6 +75,8 @@ class GDELTCollector(BaseCollector):
         return to_utc(text)
 
     def fetch(self, **params):
+        # GDELT rate limit: 1 request every 5 seconds
+        time.sleep(6)
         q = {'format': 'json', 'mode': 'ArtList'}
         for key in ('query', 'timespan', 'maxrecords', 'sort', 'startdatetime', 'enddatetime', 'sourcelang', 'sourcecountry', 'domain'):
             if params.get(key) is not None:
@@ -96,3 +99,8 @@ class GDELTCollector(BaseCollector):
                 raw=dict(a),
             ))
         return out
+
+from news_system.collectors.newsdata_collector import NewsDataCollector
+from news_system.collectors.scrapling_collector import ScraplingPlaywrightCollector
+
+__all__ = ["NewsAPICollector", "NewsDataCollector", "ScraplingPlaywrightCollector"]

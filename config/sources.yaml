@@ -1,65 +1,1167 @@
 sources:
-  - name: BBC World
-    source_type: rss
-    enabled: true
-    trusted: true
-    priority: 10
+- name: Reuters News Sitemap
+  source_type: sitemap
+  enabled: false
+  trusted: true
+  priority: 10
+  language: en
+  country: gb
+  category: world
+  credibility_score: 0.95
+  region: global
+  ownership_type: private
+  source_notes: Major wire service. Sitemap has title+date only — no description/summary.
+  url: https://www.reuters.com/arc/outboundfeeds/news-sitemap-index/?outputType=xml
+  notes: DataDome blocks full text; sitemap provides title+URL+date only, no summary for scoring.
+- name: AP (Associated Press)
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  country: us
+  category: world
+  credibility_score: 0.95
+  region: global
+  ownership_type: cooperative
+  notes: No public RSS feeds (all URLs return 404). Enterprise API (AP Content Services) requires paid subscription.
+- name: AFP (Agence France-Presse)
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  category: world
+  credibility_score: 0.95
+  region: global
+  ownership_type: cooperative
+  notes: No public RSS feeds (403/404). Enterprise subscription required.
+- name: BBC News
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: gb
+  category: world
+  credibility_score: 0.95
+  region: europe
+  ownership_type: public
+  source_notes: UK public service broadcaster. Top Stories RSS.
+  url: https://feeds.bbci.co.uk/news/rss.xml
+- name: BBC World
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: gb
+  category: world
+  credibility_score: 0.95
+  region: europe
+  ownership_type: public
+  source_notes: UK public service broadcaster. World news RSS.
+  url: https://feeds.bbci.co.uk/news/world/rss.xml
+- name: BBC Business
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: gb
+  category: business
+  credibility_score: 0.95
+  region: europe
+  ownership_type: public
+  source_notes: UK public service broadcaster. Business news RSS.
+  url: https://feeds.bbci.co.uk/news/business/rss.xml
+- name: BBC Technology
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: gb
+  category: technology
+  credibility_score: 0.95
+  region: europe
+  ownership_type: public
+  source_notes: UK public service broadcaster. Technology news RSS.
+  url: https://feeds.bbci.co.uk/news/technology/rss.xml
+- name: Al Jazeera English
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: qa
+  category: world
+  credibility_score: 0.85
+  region: middle_east
+  ownership_type: public
+  source_notes: Independent news network. RSS has full summaries. Free access.
+  url: https://www.aljazeera.com/xml/rss/all.xml
+- name: Guardian World
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: gb
+  category: world
+  credibility_score: 0.9
+  region: europe
+  ownership_type: private
+  source_notes: UK progressive news outlet
+  url: https://www.theguardian.com/world/rss
+- name: Guardian US
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: world
+  credibility_score: 0.9
+  region: europe
+  ownership_type: private
+  source_notes: UK progressive news outlet
+  url: https://www.theguardian.com/us-news/rss
+- name: Guardian Business
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: gb
+  category: business
+  credibility_score: 0.9
+  region: europe
+  ownership_type: private
+  source_notes: UK progressive news outlet
+  url: https://www.theguardian.com/business/rss
+- name: Guardian Tech
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: gb
+  category: technology
+  credibility_score: 0.9
+  region: europe
+  ownership_type: private
+  source_notes: UK progressive news outlet
+  url: https://www.theguardian.com/technology/rss
+- name: Politico
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: politics
+  credibility_score: 0.85
+  region: north_america
+  ownership_type: private
+  source_notes: US political news. RSS has full summaries. Multiple category feeds available.
+  url: https://rss.politico.com/politics-news.xml
+- name: Axios
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  country: us
+  category: world
+  credibility_score: 0.8
+  region: north_america
+  ownership_type: private
+  notes: Cloudflare JS challenge blocks all automated access. No RSS feed accessible.
+- name: NPR
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: world
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: public
+  source_notes: US public radio. RSS has full summaries. Free access.
+  url: https://feeds.npr.org/1001/rss.xml
+- name: PBS NewsHour [API fallback]
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  country: us
+  category: world
+  credibility_score: 0.85
+  region: north_america
+  ownership_type: public
+  notes: Replaced by scrapling collector version below.
+- name: Politico Europe
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: eu
+  category: politics
+  credibility_score: 0.85
+  region: europe
+  ownership_type: private
+  source_notes: EU political news. RSS has full summaries. Free access.
+  url: https://www.politico.eu/feed/
+- name: Euronews
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: eu
+  category: world
+  credibility_score: 0.8
+  region: europe
+  ownership_type: private
+  source_notes: European news network. RSS has full summaries. Free access.
+  url: https://www.euronews.com/rss
+- name: DW (Deutsche Welle)
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: de
+  category: world
+  credibility_score: 0.85
+  region: europe
+  ownership_type: public
+  source_notes: 'German public broadcaster. RSS has full summaries. Multiple feeds: top-stories or all-news.'
+  url: https://rss.dw.com/xml/rss-en-top
+- name: Nikkei Asia (API fallback)
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  country: jp
+  category: business
+  credibility_score: 0.85
+  region: asia
+  ownership_type: private
+  notes: Replaced by scrapling collector version below.
+- name: Japan Times
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: jp
+  category: world
+  credibility_score: 0.8
+  region: asia
+  ownership_type: private
+  source_notes: 'Japan''s English-language newspaper. RSS has summaries. Note: /feed/ works, /rss/ is Cloudflare-blocked.'
+  url: https://www.japantimes.co.jp/feed/
+- name: SCMP
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: hk
+  category: world
+  credibility_score: 0.8
+  region: asia
+  ownership_type: private
+  source_notes: Hong Kong-based English news. RSS has full summaries (free). Full article content behind paywall.
+  url: https://www.scmp.com/rss/91/feed
+- name: CNA Taiwan (Focus Taiwan) [API fallback]
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  country: tw
+  category: world
+  credibility_score: 0.75
+  region: asia
+  ownership_type: public
+  notes: Replaced by scrapling collector version below.
+- name: Financial Times
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: gb
+  category: business
+  credibility_score: 0.9
+  region: europe
+  ownership_type: publicly_traded
+  source_notes: Premium financial newspaper. RSS has brief descriptions/summaries (no full text).
+  url: https://www.ft.com/rss/home/international
+- name: Wall Street Journal
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  country: us
+  category: business
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  notes: RSS feeds return Next.js HTML (not XML) or 403. Effectively unavailable via automated access.
+- name: Bloomberg
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: business
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: private
+  source_notes: Premium financial news. RSS has good descriptive summaries. Multiple category feeds available.
+  url: https://feeds.bloomberg.com/markets/news.rss
+- name: CNBC
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  country: us
+  category: business
+  credibility_score: 0.8
+  region: north_america
+  ownership_type: publicly_traded
+  notes: All RSS URLs blocked by Akamai + AWS bot protection.
+- name: MarketWatch
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  country: us
+  category: business
+  credibility_score: 0.8
+  region: north_america
+  ownership_type: publicly_traded
+  notes: RSS feed infrastructure dead (old URL redirects to 404). Dow Jones bot protection.
+- name: Federal Reserve (Fed)
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 20
+  language: en
+  country: us
+  category: business
+  credibility_score: 1.0
+  region: north_america
+  ownership_type: government
+  source_notes: US central bank press releases. RSS has title+link only (descriptions repeat titles). Multiple category feeds.
+  url: https://www.federalreserve.gov/feeds/press_all.xml
+- name: European Central Bank (ECB)
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 20
+  language: en
+  country: eu
+  category: business
+  credibility_score: 1.0
+  region: europe
+  ownership_type: government
+  source_notes: ECB press releases & speeches. RSS has title+date only (no descriptions).
+  url: https://www.ecb.europa.eu/rss/press.xml
+- name: BIS (Bank for International Settlements)
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  category: business
+  credibility_score: 1.0
+  region: global
+  ownership_type: government
+  notes: No working RSS feed found (404 on all known paths).
+- name: IMF
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  category: business
+  credibility_score: 1.0
+  region: global
+  ownership_type: government
+  notes: No RSS feed. Site runs on Next.js; /en/News/RSS serves HTML page, not XML.
+- name: BEA (Bureau of Economic Analysis)
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 20
+  language: en
+  country: us
+  category: business
+  credibility_score: 1.0
+  region: north_america
+  ownership_type: government
+  source_notes: US economic indicators (GDP, income). RSS has data summaries + next-release dates. Excellent feed.
+  url: https://apps.bea.gov/rss/rss.xml
+- name: BLS (Bureau of Labor Statistics)
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  country: us
+  category: business
+  credibility_score: 1.0
+  region: north_america
+  ownership_type: government
+  notes: 'BLS blocks automated requests (403 WAF). Alternative: BLS API at data.bls.gov/API/ requires registration.'
+- name: Eurostat
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  country: eu
+  category: business
+  credibility_score: 1.0
+  region: europe
+  ownership_type: government
+  notes: RSS feeds appear removed (all URLs return 404). Eurostat API may be alternative.
+- name: SEC
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  country: us
+  category: business
+  credibility_score: 1.0
+  region: north_america
+  ownership_type: government
+  notes: RSS feed blocked (403). SEC EDGAR API available separately.
+- name: The Verge
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 15
+  language: en
+  country: us
+  category: technology
+  credibility_score: 0.8
+  region: north_america
+  ownership_type: private
+  source_notes: Tech news. Atom format — has both summaries AND full article content. Best tech feed.
+  url: https://www.theverge.com/rss/index.xml
+- name: TechCrunch
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 15
+  language: en
+  country: us
+  category: technology
+  credibility_score: 0.8
+  region: north_america
+  ownership_type: private
+  source_notes: Startup & tech news. WordPress RSS with short descriptions.
+  url: https://techcrunch.com/feed/
+- name: Wired
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 15
+  language: en
+  country: us
+  category: technology
+  credibility_score: 0.8
+  region: north_america
+  ownership_type: private
+  source_notes: Tech & culture magazine. RSS has short blurbs. Mixes editorial with deal articles. Rate-limited at 100 req/user.
+  url: https://www.wired.com/feed/
+- name: Ars Technica
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 15
+  language: en
+  country: us
+  category: technology
+  credibility_score: 0.85
+  region: north_america
+  ownership_type: private
+  source_notes: In-depth tech news. RSS has brief descriptions AND full article content in content:encoded. Best feed overall.
+  url: https://feeds.arstechnica.com/arstechnica/index
+- name: Tom's Hardware
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 15
+  language: en
+  country: us
+  category: technology
+  credibility_score: 0.75
+  region: north_america
+  ownership_type: private
+  source_notes: PC hardware news. RSS has short descriptions. 70K+ items available.
+  url: https://www.tomshardware.com/feeds.xml
+- name: AnandTech
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  country: us
+  category: technology
+  credibility_score: 0.85
+  region: north_america
+  ownership_type: private
+  notes: Site retired. Domain redirects to community forums only. No active content.
+- name: OpenAI Blog
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  category: technology
+  credibility_score: 0.95
+  region: north_america
+  ownership_type: private
+  notes: Cloudflare WAF blocks all automated requests (403). No public RSS feed.
+- name: Google AI Blog (incl. DeepMind)
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 15
+  language: en
+  country: us
+  category: technology
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  source_notes: Google's general AI + Keyword blog. Includes DeepMind articles (Gemini, etc.) as proxy. Has descriptions.
+  url: https://blog.google/innovation-and-ai/technology/ai/rss/
+- name: Anthropic Blog
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  category: technology
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: private
+  notes: No public RSS feed found (all URLs 404). Web scraping or social media monitoring required.
+- name: Meta AI Blog
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  category: technology
+  credibility_score: 0.85
+  region: north_america
+  ownership_type: publicly_traded
+  notes: No public RSS feed found (all URLs 404).
+- name: Microsoft AI Blog
+  source_type: rss
+  enabled: false
+  trusted: true
+  priority: 15
+  language: en
+  country: us
+  category: technology
+  credibility_score: 0.85
+  region: north_america
+  ownership_type: publicly_traded
+  source_notes: 'Microsoft AI blog. RSS has full content in content:encoded. Note: last build was Dec 2022 — may be low activity.'
+  url: https://blogs.microsoft.com/ai/feed/
+- name: NVIDIA Blog
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 15
+  language: en
+  country: us
+  category: technology
+  credibility_score: 0.85
+  region: north_america
+  ownership_type: publicly_traded
+  source_notes: GPU/AI company blog. RSS has excellent descriptions + full content. Very active (June 2026).
+  url: https://blogs.nvidia.com/feed/
+- name: arXiv cs.AI
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 20
+  language: en
+  category: science
+  credibility_score: 1.0
+  region: global
+  ownership_type: academic
+  source_notes: AI preprints. RSS has full abstracts, authors, categories. Updated Mon-Fri. Best academic feed.
+  url: https://export.arxiv.org/rss/cs.AI
+- name: Papers with Code
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  category: science
+  credibility_score: 0.85
+  region: global
+  ownership_type: academic
+  notes: No RSS feed available (serves HTML page). API may be alternative.
+- name: Hugging Face Blog
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 20
+  language: en
+  category: technology
+  credibility_score: 0.85
+  region: global
+  ownership_type: private
+  source_notes: ML/AI community blog. RSS has title+link+date only (no description). Need to fetch each page separately.
+  url: https://huggingface.co/blog/feed.xml
+- name: EU Press Corner
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 20
+  language: en
+  country: eu
+  category: world
+  credibility_score: 1.0
+  region: europe
+  ownership_type: government
+  source_notes: European Commission press releases. RSS has descriptive summaries. Filterable by policy area. Excellent official feed.
+  url: https://ec.europa.eu/commission/presscorner/api/rss
+- name: UK CMA
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 20
+  language: en
+  country: gb
+  category: business
+  credibility_score: 1.0
+  region: europe
+  ownership_type: government
+  source_notes: UK Competition & Markets Authority. Atom feed with summaries.
+  url: https://www.gov.uk/government/organisations/competition-and-markets-authority.atom
+- name: DOJ (Department of Justice)
+  source_type: rss
+  enabled: false
+  trusted: true
+  priority: 20
+  language: en
+  country: us
+  category: world
+  credibility_score: 1.0
+  region: north_america
+  ownership_type: government
+  source_notes: US DOJ press releases. RSS has titles only — descriptions empty. Mostly FOIA procedural notices.
+  url: https://www.justice.gov/feeds/justice-news.xml
+- name: White House
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  country: us
+  category: world
+  credibility_score: 1.0
+  region: north_america
+  ownership_type: government
+  notes: All RSS/WP-feed URLs blocked (403/404). WhiteHouse.gov behind aggressive WAF.
+- name: State Department
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  country: us
+  category: world
+  credibility_score: 1.0
+  region: north_america
+  ownership_type: government
+  notes: Returns HTML page at /rss/ — no actual RSS XML feed.
+- name: NATO
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  category: world
+  credibility_score: 1.0
+  region: global
+  ownership_type: government
+  notes: All known RSS paths return 404. Feeds appear removed.
+- name: UN News
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  category: world
+  credibility_score: 1.0
+  region: global
+  ownership_type: government
+  notes: RSS feed appears non-functional (empty body or HTML returned).
+- name: FTC (Federal Trade Commission)
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  country: us
+  category: business
+  credibility_score: 1.0
+  region: north_america
+  ownership_type: government
+  notes: RSS feed blocked (403).
+- name: NYT HomePage
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: world
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  source_notes: US newspaper of record. RSS has in-feed descriptions/summaries. DataDome blocks full-text automation.
+  url: https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
+- name: NYT World
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: world
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  url: https://rss.nytimes.com/services/xml/rss/nyt/World.xml
+- name: NYT US
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: world
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  url: https://rss.nytimes.com/services/xml/rss/nyt/US.xml
+- name: NYT Politics
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: politics
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  url: https://rss.nytimes.com/services/xml/rss/nyt/Politics.xml
+- name: NYT Europe
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: gb
+  category: world
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  url: https://rss.nytimes.com/services/xml/rss/nyt/Europe.xml
+- name: NYT AsiaPacific
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: jp
+  category: world
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  url: https://rss.nytimes.com/services/xml/rss/nyt/AsiaPacific.xml
+- name: NYT MiddleEast
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: world
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  url: https://rss.nytimes.com/services/xml/rss/nyt/MiddleEast.xml
+- name: NYT Africa
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: world
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  url: https://rss.nytimes.com/services/xml/rss/nyt/Africa.xml
+- name: NYT Americas
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: world
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  url: https://rss.nytimes.com/services/xml/rss/nyt/Americas.xml
+- name: NYT Business
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: business
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  url: https://rss.nytimes.com/services/xml/rss/nyt/Business.xml
+- name: NYT Economy
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: business
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  url: https://rss.nytimes.com/services/xml/rss/nyt/Economy.xml
+- name: NYT Dealbook
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: business
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  url: https://rss.nytimes.com/services/xml/rss/nyt/Dealbook.xml
+- name: NYT Technology
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: technology
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  url: https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml
+- name: NYT Science
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: science
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  url: https://rss.nytimes.com/services/xml/rss/nyt/Science.xml
+- name: NYT Space
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: science
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  url: https://rss.nytimes.com/services/xml/rss/nyt/Space.xml
+- name: NYT Climate
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: climate
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  url: https://rss.nytimes.com/services/xml/rss/nyt/Climate.xml
+- name: NYT PersonalTech
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: technology
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  url: https://rss.nytimes.com/services/xml/rss/nyt/PersonalTech.xml
+- name: NYT Health
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: health
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  url: https://rss.nytimes.com/services/xml/rss/nyt/Health.xml
+- name: NYT MostEmailed
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: world
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  source_notes: Most-emailed articles — popularity signal for scoring.
+  url: https://rss.nytimes.com/services/xml/rss/nyt/MostEmailed.xml
+- name: NYT MostShared
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: world
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  url: https://rss.nytimes.com/services/xml/rss/nyt/MostShared.xml
+- name: NYT MostViewed
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: world
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  url: https://rss.nytimes.com/services/xml/rss/nyt/MostViewed.xml
+- name: GDELT World News
+  source_type: gdelt
+  enabled: true
+  trusted: false
+  priority: 15
+  language: en
+  category: world
+  credibility_score: 0.5
+  region: global
+  ownership_type: academic
+  source_notes: Global event database, aggregated. Has article snippets.
+  base_url: https://api.gdeltproject.org/api/v2/doc/doc
+  query: world
+  params:
+    mode: ArtList
+    format: json
+    timespan: 1d
+    maxrecords: 50
+    sort: HybridRel
+- name: NewsAPI Top Headlines
+  source_type: newsapi
+  enabled: true
+  trusted: true
+  priority: 20
+  language: en
+  country: us
+  category: general
+  credibility_score: 0.5
+  region: global
+  ownership_type: commercial
+  source_notes: News aggregation API — includes description field
+  query: world
+  base_url: https://newsapi.org/v2
+  params:
+    endpoint: top-headlines
+    api_key_env: NEWSAPI_API_KEY
+    pageSize: 50
+- name: NewsAPI Everything
+  source_type: newsapi
+  enabled: true
+  trusted: true
+  priority: 25
+  language: en
+  category: world
+  credibility_score: 0.5
+  region: global
+  ownership_type: commercial
+  source_notes: News aggregation API — includes description field
+  query: world
+  base_url: https://newsapi.org/v2
+  params:
+    endpoint: everything
+    api_key_env: NEWSAPI_API_KEY
+    sortBy: publishedAt
+    pageSize: 50
+- name: NewsData.io
+  source_type: newsdata
+  enabled: true
+  trusted: true
+  priority: 30
+  language: en
+  category: world
+  credibility_score: 0.6
+  region: global
+  ownership_type: commercial
+  source_notes: News aggregation API, free tier. Includes description/links.
+  base_url: https://newsdata.io/api/1
+  params:
+    api_key_env: NEWSDATA_API_KEY
     language: en
-    country: gb
-    category: world
-    url: https://feeds.bbci.co.uk/news/world/rss.xml
-
-  - name: Reuters World
-    source_type: rss
-    enabled: false
-    trusted: true
-    priority: 10
-    language: en
-    category: world
-    url: https://www.reutersagency.com/feed/?best-topics=world&post_type=best
-
-  - name: NewsAPI Top Headlines Example
-    source_type: newsapi
-    enabled: false
-    trusted: false
-    priority: 50
-    language: en
-    country: us
-    category: general
-    query: world
-    base_url: https://newsapi.org/v2
-    params:
-      endpoint: top-headlines
-      api_key_env: NEWSAPI_API_KEY
-      pageSize: 50
-
-  - name: NewsAPI Everything Example
-    source_type: newsapi
-    enabled: false
-    trusted: false
-    priority: 55
-    language: en
-    category: world
-    query: climate OR economy
-    base_url: https://newsapi.org/v2
-    params:
-      endpoint: everything
-      api_key_env: NEWSAPI_API_KEY
-      sortBy: publishedAt
-      pageSize: 50
-
-  - name: GDELT Disaster Monitor
-    source_type: gdelt
-    enabled: false
-    trusted: false
-    priority: 60
-    language: en
-    category: world
-    base_url: https://api.gdeltproject.org/api/v2/doc/doc
-    query: disaster OR earthquake OR flood
-    params:
-      mode: ArtList
-      format: json
-      timespan: 1d
-      maxrecords: 50
-      sort: HybridRel
+    size: 10
+  notes: 'Free tier: 200 req/day, 7-day lookback.'
+- name: Mediastack
+  source_type: api
+  enabled: false
+  trusted: false
+  priority: 35
+  language: en
+  category: world
+  url: http://api.mediastack.com/v1/news
+  notes: 'Free tier 500 req/month. Requires api_key_env: MEDIASTACK_API_KEY. Collector TBD.'
+- name: Currents API
+  source_type: api
+  enabled: false
+  trusted: false
+  priority: 30
+  language: en
+  category: world
+  url: https://api.currentsapi.services/v1/latest-news
+  notes: 'Free tier available. Requires api_key_env: CURRENTS_API_KEY. Collector TBD.'
+- name: Event Registry
+  source_type: api
+  enabled: false
+  trusted: false
+  priority: 30
+  language: en
+  category: world
+  url: https://eventregistry.org/api/v1/article/getArticles
+  notes: 'Free tier available. Requires api_key_env: EVENT_REGISTRY_KEY. Collector TBD.'
+- name: Reuters Connect
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  category: world
+  notes: Enterprise API. Requires paid subscription. Disabled.
+- name: AP API
+  source_type: api
+  enabled: false
+  trusted: true
+  priority: 90
+  language: en
+  category: world
+  notes: Enterprise API (AP Content Services). Requires paid subscription. Disabled.
+- name: AP News
+  source_type: scrapling
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: world
+  credibility_score: 0.95
+  region: global
+  ownership_type: cooperative
+  source_notes: Major US wire service. Scraped via Playwright — no public RSS.
+  url: https://apnews.com/hub/ap-top-news
+- name: Nikkei Asia
+  source_type: scrapling
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: jp
+  category: business
+  credibility_score: 0.85
+  region: asia
+  ownership_type: private
+  source_notes: Asian business news. Scraped via Playwright — no English RSS.
+  url: https://asia.nikkei.com/
+- name: PBS NewsHour
+  source_type: scrapling
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: world
+  credibility_score: 0.85
+  region: north_america
+  ownership_type: public
+  source_notes: US public broadcasting news. Scraped via Playwright — no RSS available.
+  url: https://www.pbs.org/newshour/
+- name: CNA Taiwan (Focus Taiwan)
+  source_type: scrapling
+  enabled: true
+  trusted: true
+  priority: 10
+  language: en
+  country: tw
+  category: world
+  credibility_score: 0.75
+  region: asia
+  ownership_type: public
+  source_notes: Taiwan English news. Scraped via Playwright — no RSS.
+  url: https://focustaiwan.tw/
+- name: IMF Blog
+  source_type: scrapling
+  enabled: true
+  trusted: true
+  priority: 15
+  language: en
+  category: business
+  credibility_score: 1.0
+  region: global
+  ownership_type: government
+  source_notes: International Monetary Fund blog. Scraped via Playwright — no RSS.
+  url: https://www.imf.org/en/Blogs

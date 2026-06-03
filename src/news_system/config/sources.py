@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 import yaml
 
-VALID_SOURCE_TYPES = {"rss", "newsapi", "gdelt"}
+VALID_SOURCE_TYPES = {"rss", "newsapi", "gdelt", "sitemap", "api", "newsdata", "scrapling"}
 DEFAULT_PATH = "config/sources.yaml"
 
 
@@ -29,6 +29,10 @@ class SourceConfig:
     language: str | None = None
     domain: str | None = None
     base_url: str | None = None
+    credibility_score: float = 0.5
+    region: str | None = None
+    ownership_type: str | None = None
+    source_notes: str | None = None
     params: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -110,6 +114,10 @@ def _normalize_source(raw: dict[str, Any], index: int) -> SourceConfig:
         language=_norm_text(raw.get("language")),
         domain=domain,
         base_url=base_url,
+        credibility_score=float(raw.get("credibility_score") or 0.5),
+        region=_norm_text(raw.get("region")),
+        ownership_type=_norm_text(raw.get("ownership_type")),
+        source_notes=_norm_text(raw.get("source_notes"), lower=False),
         params=dict(params),
     )
 
