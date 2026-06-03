@@ -114,6 +114,49 @@ Expected JSON includes top-level `fetched`, `inserted`, `duplicates`, `filtered_
 
 For PostgreSQL verification, set `DATABASE_URL` explicitly and run `daily-news db-smoke`. The smoke command verifies required tables and inserts a unique source/article/event/link/collection run. `tests/test_postgres_integration.py` calls the same function and skips unless `DATABASE_URL` is present.
 
+
+## Cron/Hermes wrappers
+
+Use the repository-local wrappers for scheduling rather than embedding long `uv run daily-news ...` commands in cron. They are POSIX `sh` scripts, executable, safe to invoke from any current working directory, and resolve the repo root from their own location.
+
+Dedicated Hermes cron mounting/scheduling details live in [`docs/hermes_cron.md`](hermes_cron.md); keep this section as a summary and do not duplicate that full runbook here.
+
+Common behavior:
+
+- preserve caller-provided `DATABASE_URL`, API keys, and other environment values;
+- optionally load `/opt/data/plugins/Daily_news/.env` for variables that are not already set;
+- default `UV_PROJECT_ENVIRONMENT=.venv` unless the caller sets another value;
+- run the CLI through `uv run daily-news` from the repository root.
+
+Commands:
+
+```bash
+# Defaults: NEWS_SOURCE/all and LOOKBACK_HOURS/1.
+/opt/data/plugins/Daily_news/scripts/cron_collect.sh
+/opt/data/plugins/Daily_news/scripts/cron_collect.sh rss 24
+NEWS_SOURCE=gdelt LOOKBACK_HOURS=6 /opt/data/plugins/Daily_news/scripts/cron_collect.sh
+
+# Defaults: LOOKBACK_HOURS/24 and LIMIT/10.
+/opt/data/plugins/Daily_news/scripts/cron_build_daily_events.sh
+/opt/data/plugins/Daily_news/scripts/cron_build_daily_events.sh 48 20
+LOOKBACK_HOURS=48 LIMIT=20 /opt/data/plugins/Daily_news/scripts/cron_build_daily_events.sh
+
+# Default: LOOKBACK_MINUTES/60.
+/opt/data/plugins/Daily_news/scripts/cron_watch_breaking.sh
+/opt/data/plugins/Daily_news/scripts/cron_watch_breaking.sh 180
+LOOKBACK_MINUTES=180 /opt/data/plugins/Daily_news/scripts/cron_watch_breaking.sh
+```
+
+Hermes cron example command entries, assuming PostgreSQL is already provisioned and reachable:
+
+```bash
+DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_news' /opt/data/plugins/Daily_news/scripts/cron_collect.sh
+DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_news' /opt/data/plugins/Daily_news/scripts/cron_build_daily_events.sh
+DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_news' /opt/data/plugins/Daily_news/scripts/cron_watch_breaking.sh
+```
+
+Do not claim these jobs are installed unless a separate scheduler/Hermes cron action actually creates them.
+
 ## API
 
 FastAPI app object:
@@ -164,6 +207,7 @@ UV_PROJECT_ENVIRONMENT=.venv uv run alembic upgrade head
 - `src/news_system/processors/` — normalization, de-duplication, event clustering, scoring, breaking detection.
 - `src/news_system/jobs/` — orchestration functions used by the CLI.
 - `src/news_system/api/` — FastAPI app.
+- `scripts/` — repo-local cron/Hermes shell wrappers.
 - `src/news_system/db/` — database models and session setup.
 - `src/news_system/storage/` — persistence/repository helpers.
 - `tests/` — pytest unit tests.

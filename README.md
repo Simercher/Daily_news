@@ -76,6 +76,46 @@ DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_ne
 
 If PostgreSQL runs on the host from inside a container, `localhost` may point at the container rather than the host; set `DATABASE_URL` to the reachable host name/IP (for example `host.docker.internal` where supported).
 
+
+## Cron/Hermes wrappers
+
+Repo-local shell wrappers live in `scripts/` for cron or Hermes cron jobs that may run from any current working directory. They resolve the repository root relative to the script path, optionally load a repo-local `.env` without overriding already-set environment variables, default `UV_PROJECT_ENVIRONMENT=.venv`, and then invoke `uv run daily-news ...`.
+
+For a dedicated Hermes cron scheduling runbook, including suggested schedules and `hermes cron create` examples, see [`docs/hermes_cron.md`](docs/hermes_cron.md).
+
+Wrappers and defaults:
+
+```bash
+# Collect from all configured sources from the last 1 hour.
+scripts/cron_collect.sh
+
+# Build daily events from the last 24 hours, limiting output/work to 10 events.
+scripts/cron_build_daily_events.sh
+
+# Detect breaking events over the last 60 minutes.
+scripts/cron_watch_breaking.sh
+```
+
+Environment variables and positional arguments can override those defaults:
+
+```bash
+# Positional overrides: source, lookback hours.
+scripts/cron_collect.sh rss 24
+
+# Environment overrides.
+NEWS_SOURCE=gdelt LOOKBACK_HOURS=6 scripts/cron_collect.sh
+LOOKBACK_HOURS=48 LIMIT=20 scripts/cron_build_daily_events.sh
+LOOKBACK_MINUTES=180 scripts/cron_watch_breaking.sh
+```
+
+Set `DATABASE_URL` and provider API keys in the Hermes cron environment or in `.env`; caller-provided environment values win over `.env` values. Example Hermes cron command entries (create them in Hermes cron, not in this repository):
+
+```bash
+DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_news' /opt/data/plugins/Daily_news/scripts/cron_collect.sh
+DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_news' /opt/data/plugins/Daily_news/scripts/cron_build_daily_events.sh
+DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_news' /opt/data/plugins/Daily_news/scripts/cron_watch_breaking.sh
+```
+
 ## API
 
 The FastAPI application is `news_system.api.main:app`.
@@ -125,6 +165,7 @@ It verifies the required tables, inserts one source/article/event/link/collectio
 - `src/news_system/processors/` — normalization, de-duplication, clustering, scoring, and breaking detection logic.
 - `src/news_system/jobs/` — CLI job orchestration.
 - `src/news_system/api/` — FastAPI app.
+- `scripts/` — repo-local cron/Hermes shell wrappers.
 - `tests/` — unit tests.
 - `alembic/` — database migrations.
 - `docs/` — human and agent-facing documentation.

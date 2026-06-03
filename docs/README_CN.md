@@ -76,6 +76,46 @@ DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_ne
 
 如果 PostgreSQL 是跑在 host 而 CLI 在 container 內執行，`localhost` 可能指向 container 本身；請將 `DATABASE_URL` 改成可連到 host 的名稱/IP（例如環境支援時使用 `host.docker.internal`）。
 
+
+## Cron/Hermes wrappers
+
+Repository 內的 `scripts/` 提供適合 cron 或 Hermes cron 使用的 shell wrappers，可從任何目前工作目錄執行。它們會依照 script 位置解析 repository root、選擇性讀取 repo-local `.env` 且不覆蓋已由呼叫端設定的環境變數，預設 `UV_PROJECT_ENVIRONMENT=.venv`，再執行 `uv run daily-news ...`。
+
+Hermes cron 排程與掛載方式的專門 runbook 請見 [`docs/hermes_cron.md`](hermes_cron.md)；本節只保留摘要，避免重複太多設定細節。
+
+Wrappers 與預設值：
+
+```bash
+# 收集最近 1 小時所有設定來源。
+scripts/cron_collect.sh
+
+# 以最近 24 小時建立 daily events，limit 預設 10。
+scripts/cron_build_daily_events.sh
+
+# 偵測最近 60 分鐘的 breaking events。
+scripts/cron_watch_breaking.sh
+```
+
+可用環境變數或 positional arguments 覆蓋預設值：
+
+```bash
+# Positional overrides：source、lookback hours。
+scripts/cron_collect.sh rss 24
+
+# Environment overrides。
+NEWS_SOURCE=gdelt LOOKBACK_HOURS=6 scripts/cron_collect.sh
+LOOKBACK_HOURS=48 LIMIT=20 scripts/cron_build_daily_events.sh
+LOOKBACK_MINUTES=180 scripts/cron_watch_breaking.sh
+```
+
+請在 Hermes cron 環境或 `.env` 設定 `DATABASE_URL` 與 provider API keys；呼叫端已設定的環境變數優先於 `.env`。Hermes cron command entries 範例（請在 Hermes cron 建立，不是在此 repo 中建立）：
+
+```bash
+DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_news' /opt/data/plugins/Daily_news/scripts/cron_collect.sh
+DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_news' /opt/data/plugins/Daily_news/scripts/cron_build_daily_events.sh
+DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_news' /opt/data/plugins/Daily_news/scripts/cron_watch_breaking.sh
+```
+
 ## API
 
 FastAPI application 是 `news_system.api.main:app`。
@@ -125,6 +165,7 @@ DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_ne
 - `src/news_system/processors/` — 正規化、去重、聚類、評分與 breaking detection 邏輯。
 - `src/news_system/jobs/` — CLI job orchestration。
 - `src/news_system/api/` — FastAPI app。
+- `scripts/` — repo-local cron/Hermes shell wrappers。
 - `tests/` — unit tests。
 - `alembic/` — database migrations。
 - `docs/` — 人類與 agent 使用的文件。
