@@ -52,10 +52,15 @@ def db_session():
     SessionLocal = get_session_local()
     session = SessionLocal()
     yield session
-    # Clean up all data created during the test
-    session.execute(text("DELETE FROM event_articles"))
-    session.execute(text("DELETE FROM articles"))
-    session.execute(text("DELETE FROM events"))
+    # Clean up only rows created by this test module. Do not wipe the shared
+    # PostgreSQL database used by the live Daily_news pipeline.
+    session.execute(text("""
+        DELETE FROM event_articles
+        WHERE event_id IN (SELECT id FROM events WHERE title = 'Test Event')
+           OR article_id IN (SELECT id FROM articles WHERE url LIKE 'https://example.com/article/%')
+    """))
+    session.execute(text("DELETE FROM articles WHERE url LIKE 'https://example.com/article/%'"))
+    session.execute(text("DELETE FROM events WHERE title = 'Test Event'"))
     session.commit()
     session.close()
 
