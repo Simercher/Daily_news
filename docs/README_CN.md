@@ -27,7 +27,7 @@ Daily_news 是一個 Python 新聞資料層 MVP。它會從設定好的來源收
 建議的開發環境：
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv sync --dev
+UV_PROJECT_ENVIRONMENT=.venv uv sync --dev
 ```
 
 如果偏好一般 `.venv` 也可以：
@@ -41,7 +41,7 @@ UV_PROJECT_ENVIRONMENT=.venv uv sync --dev
 ## 測試
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run pytest -q
+UV_PROJECT_ENVIRONMENT=.venv uv run pytest -q
 ```
 
 ## CLI
@@ -49,17 +49,18 @@ UV_PROJECT_ENVIRONMENT=.venv-news-system uv run pytest -q
 顯示說明：
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news --help
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news --help
 ```
 
 可用指令：
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news collect --source all --lookback-hours 1
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news build-events
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news watch-breaking
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news show-daily
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news show-breaking
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news collect --source all --lookback-hours 1
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news build-events
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news watch-breaking
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news show-daily
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news show-breaking
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news db-smoke
 ```
 
 ## API
@@ -69,7 +70,7 @@ FastAPI application 是 `news_system.api.main:app`。
 啟動方式：
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run uvicorn news_system.api.main:app --reload
+UV_PROJECT_ENVIRONMENT=.venv uv run uvicorn news_system.api.main:app --reload
 ```
 
 Endpoints：
@@ -91,8 +92,17 @@ postgresql+psycopg://news:news@localhost:5432/news
 確認目標 database 已存在且 connection string 正確後，可以套用 migrations：
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run alembic upgrade head
+UV_PROJECT_ENVIRONMENT=.venv uv run alembic upgrade head
 ```
+
+當 `DATABASE_URL` 指向已建立 Daily_news tables 的 PostgreSQL database 時，可執行可重用的 DB smoke check：
+
+```bash
+DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_news' \
+  UV_PROJECT_ENVIRONMENT=.venv uv run daily-news db-smoke
+```
+
+它會檢查必要 tables、用 unique test values 寫入一筆 source/article/event/link/collection run，並輸出 JSON。
 
 ## 主要目錄
 

@@ -45,7 +45,7 @@ Requirements:
 Recommended environment command:
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv sync --dev
+UV_PROJECT_ENVIRONMENT=.venv uv sync --dev
 ```
 
 A standard `.venv` can also be used if the caller prefers:
@@ -56,21 +56,20 @@ UV_PROJECT_ENVIRONMENT=.venv uv sync --dev
 
 Notes:
 
-- `.venv-news-system` is only a virtual environment name. Do not treat it as the project name.
-- `uv.lock` may normalize the package name to `daily-news`; that is acceptable. `pyproject.toml` must keep `name = "Daily_news"`.
+- - `uv.lock` may normalize the package name to `daily-news`; that is acceptable. `pyproject.toml` must keep `name = "Daily_news"`.
 
 ## Verification and tests
 
 Primary test command:
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run pytest -q
+UV_PROJECT_ENVIRONMENT=.venv uv run pytest -q
 ```
 
 CLI smoke test:
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news --help
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news --help
 ```
 
 Directory cleanup check:
@@ -86,20 +85,23 @@ If a dependency or interpreter is missing, repair the uv environment first and r
 Entrypoint:
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news --help
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news --help
 ```
 
 Current subcommands:
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news collect --source all --lookback-hours 1
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news build-events
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news watch-breaking
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news show-daily
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news show-breaking
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news collect --source all --lookback-hours 1
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news build-events
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news watch-breaking
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news show-daily
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news show-breaking
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news db-smoke
 ```
 
 Current CLI output is compact JSON for job results.
+
+For PostgreSQL verification, set `DATABASE_URL` explicitly and run `daily-news db-smoke`. The smoke command verifies required tables and inserts a unique source/article/event/link/collection run. `tests/test_postgres_integration.py` calls the same function and skips unless `DATABASE_URL` is present.
 
 ## API
 
@@ -112,7 +114,7 @@ news_system.api.main:app
 Run locally:
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run uvicorn news_system.api.main:app --reload
+UV_PROJECT_ENVIRONMENT=.venv uv run uvicorn news_system.api.main:app --reload
 ```
 
 Endpoints:
@@ -142,7 +144,7 @@ postgresql+psycopg://news:news@localhost:5432/news
 Apply migrations only after confirming the target database and credentials:
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run alembic upgrade head
+UV_PROJECT_ENVIRONMENT=.venv uv run alembic upgrade head
 ```
 
 ## Main directories

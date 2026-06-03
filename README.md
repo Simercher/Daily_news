@@ -27,7 +27,7 @@ Requirements:
 Recommended development environment:
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv sync --dev
+UV_PROJECT_ENVIRONMENT=.venv uv sync --dev
 ```
 
 A conventional `.venv` is also fine if preferred:
@@ -41,7 +41,7 @@ Optional local environment configuration can be copied from `.env.example` if pr
 ## Tests
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run pytest -q
+UV_PROJECT_ENVIRONMENT=.venv uv run pytest -q
 ```
 
 ## CLI
@@ -49,17 +49,18 @@ UV_PROJECT_ENVIRONMENT=.venv-news-system uv run pytest -q
 Show help:
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news --help
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news --help
 ```
 
 Available commands:
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news collect --source all --lookback-hours 1
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news build-events
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news watch-breaking
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news show-daily
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run daily-news show-breaking
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news collect --source all --lookback-hours 1
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news build-events
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news watch-breaking
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news show-daily
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news show-breaking
+UV_PROJECT_ENVIRONMENT=.venv uv run daily-news db-smoke
 ```
 
 ## API
@@ -69,7 +70,7 @@ The FastAPI application is `news_system.api.main:app`.
 Run it with:
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run uvicorn news_system.api.main:app --reload
+UV_PROJECT_ENVIRONMENT=.venv uv run uvicorn news_system.api.main:app --reload
 ```
 
 Endpoints:
@@ -91,8 +92,17 @@ postgresql+psycopg://news:news@localhost:5432/news
 Apply migrations after ensuring the target database exists and the connection string is correct:
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-news-system uv run alembic upgrade head
+UV_PROJECT_ENVIRONMENT=.venv uv run alembic upgrade head
 ```
+
+When `DATABASE_URL` points at a PostgreSQL database with the Daily_news tables, run the reusable DB smoke check:
+
+```bash
+DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_news' \
+  UV_PROJECT_ENVIRONMENT=.venv uv run daily-news db-smoke
+```
+
+It verifies the required tables, inserts one source/article/event/link/collection run using unique test values, and prints JSON.
 
 ## Main directories
 
