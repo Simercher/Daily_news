@@ -75,7 +75,7 @@ def _decision_metadata(decisions: dict[str, ClassificationDecision]) -> dict[str
 def main():
     p = argparse.ArgumentParser(prog="domain-summarizer")
     p.add_argument("--lookback-hours", type=int, default=24)
-    p.add_argument("--limit", type=int, default=50)
+    p.add_argument("--limit", type=int, default=None)
     args = p.parse_args()
 
     engine = get_engine()
@@ -90,8 +90,9 @@ def main():
             .where(ArticleModel.published_at >= since)
             .where(ArticleModel.is_duplicate == False)
             .order_by(ArticleModel.published_at.desc())
-            .limit(args.limit)
         )
+        if args.limit is not None:
+            stmt = stmt.limit(args.limit)
 
         articles = list(db.execute(stmt).scalars())
 
