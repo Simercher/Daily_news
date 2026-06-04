@@ -104,6 +104,20 @@ def test_collect_job_records_failed_source_run():
     assert run.error_message == "boom"
 
 
+def test_collect_job_positional_arguments_preserve_compatibility():
+    db = make_session()
+    result = collect_job(
+        db,
+        "rss",
+        24,
+        [FakeCollector([article("Positional", "https://example.com/positional")])],
+    )
+
+    assert result["fetched"] == 1
+    assert result["inserted"] == 1
+    assert result["duplicates"] == 0
+
+
 def test_cli_collect_smoke_with_fake_db_and_collector(monkeypatch, tmp_path, capsys):
     db_url = f"sqlite+pysqlite:///{tmp_path / 'news.db'}"
     monkeypatch.setenv("DATABASE_URL", db_url)
