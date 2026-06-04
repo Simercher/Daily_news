@@ -1,33 +1,60 @@
 # Daily_news Agent Handoff
 
-This document is the handoff/runbook for an automation agent that needs to work on or operate the Daily_news repository.
+This document is the handoff/runbook for an automation agent that needs to work on the Daily_news repository while correctly distinguishing between repo-contained code and the external Hermes operational layer used in production.
 
 ## Project purpose
 
-Daily_news is a Python news data layer MVP. It collects candidate news articles, normalizes and stores articles/events, deduplicates and clusters related items, scores events, marks breaking events, and exposes read access through a CLI and FastAPI application.
+Daily_news is the data and processing core for a news briefing system. Inside this repository, it collects articles from configured providers, normalizes and stores article/event data, performs deterministic de-duplication, clustering, scoring, and breaking-news detection, and exposes read access through a CLI and FastAPI app.
 
 The Python project name must remain `Daily_news` in `pyproject.toml`. The command-line entry point is `daily-news`. The internal Python package namespace is `news_system`; keep that namespace in imports and source-path references.
 
-## Current scope
+## Scope and repo/ops boundary
 
-In scope now:
+This repository contains the core pipeline logic:
 
-- RSS, NewsAPI, and GDELT collection interfaces.
-- SQLAlchemy database models and repository helpers.
-- Alembic migration scaffold for PostgreSQL.
-- Article normalization.
-- Deterministic URL-based de-duplication.
-- Event clustering, scoring, and breaking-event detection.
-- CLI jobs for collection and event views.
-- FastAPI read endpoints.
+- collectors for RSS, NewsAPI, and GDELT inputs;
+- SQLAlchemy models and repository helpers;
+- Alembic migration scaffold for PostgreSQL;
+- normalization, URL de-duplication, event clustering, scoring, breaking-news detection, and domain candidate generation;
+- CLI jobs and repo-local helper scripts for collection, event building, and structured candidate output;
+- FastAPI read endpoints for daily, breaking, and single-event views.
 
-Out of scope now:
+Important boundary:
 
-- LLM summarization or ranking by an LLM.
-- Discord posting.
-- Frontend/UI.
-- Multi-agent orchestration.
-- Paywall/CAPTCHA bypassing or restricted-content access.
+- **Repo-contained code**: deterministic collection, processing, storage, APIs, and structured candidate outputs.
+- **Operational production layer outside this repo**: Hermes profile(s), cron scheduling, final LLM reasoning, Traditional Chinese briefing writing, final domain classification/selection, and Discord forum posting.
+
+Therefore:
+
+- do not describe Discord posting as a committed repo feature;
+- do not describe final LLM summarization/classification as implemented inside repo code;
+- do describe the production workflow as using this repo as its processing engine.
+
+## Current operational pipeline
+
+The current production system is split across this repo and an external Hermes operational layer.
+
+### Daily-news flow
+
+1. Collect articles with `daily-news collect --lookback-hours 24` or equivalent operator scheduling.
+2. Generate structured domain candidates with `scripts/domain_summarizer.py --lookback-hours 24`.
+3. The external Hermes profile performs final LLM reasoning, chooses domains dynamically, writes the final Traditional Chinese summary, and posts to Discord.
+
+Operational facts that should be documented accurately:
+
+- `scripts/domain_summarizer.py` now queries **all non-duplicate articles in the lookback window by default**.
+- `--limit` is optional and only constrains the query when explicitly passed.
+- The script emits structured JSON candidates plus `rule_domain` hints.
+- `rule_domain` is deterministic guidance, **not** the final production domain decision.
+- Final production domain selection is handled outside the repo and the number of selected items per domain is **dynamic** — typically around 4–10 articles per domain, not a fixed 5-item output.
+
+### Breaking-news flow
+
+1. Run fast RSS-only collection with `scripts/collect_rss_quick.py --lookback-hours 2`.
+2. Run `daily-news watch-breaking --lookback-minutes 120 --limit 10`.
+3. If breaking events exist, the operational layer posts to a Discord forum and notifies a dedicated thread; otherwise it remains silent.
+
+Treat the repository as the processing engine for both daily and breaking-news workflows; Hermes handles final reasoning, formatting, and delivery.
 
 ## Environment setup
 
@@ -48,15 +75,9 @@ Recommended environment command:
 UV_PROJECT_ENVIRONMENT=.venv uv sync --dev
 ```
 
-A standard `.venv` can also be used if the caller prefers:
-
-```bash
-UV_PROJECT_ENVIRONMENT=.venv uv sync --dev
-```
-
 Notes:
 
-- - `uv.lock` may normalize the package name to `daily-news`; that is acceptable. `pyproject.toml` must keep `name = "Daily_news"`.
+- `uv.lock` may normalize the package name to `daily-news`; that is acceptable. `pyproject.toml` must keep `name = "Daily_news"`.
 
 ## Verification and tests
 
@@ -101,61 +122,37 @@ UV_PROJECT_ENVIRONMENT=.venv uv run daily-news show-breaking
 UV_PROJECT_ENVIRONMENT=.venv uv run daily-news db-smoke
 ```
 
-Current CLI output is compact JSON for job results. `config/sources.yaml` is the single source configuration entry point; `sources validate/list` check and show the normalized source schema, and `collect` only builds collectors for enabled config entries.
+`config/sources.yaml` is the single source configuration entry point. `daily-news collect --source all|rss|newsapi|gdelt|<name>` loads this file and collects only enabled sources.
 
-RSS collection path to verify Step 3:
+RSS collection path to verify collection behavior:
 
 ```bash
 DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_news' \
   UV_PROJECT_ENVIRONMENT=.venv uv run daily-news collect --source rss --lookback-hours 24
 ```
 
-Expected JSON includes top-level `fetched`, `inserted`, `duplicates`, `filtered_old`, `source_counts`, and `errors`. Collection uses `DATABASE_URL`/`SessionLocal`, writes `news_sources` metadata (`trusted`, `priority`, etc.), records `collection_runs`, normalizes/canonicalizes URLs, and upserts by unique `url_hash`. The current no-explicit-session CLI path calls `Base.metadata.create_all(engine)` before opening a session; this is convenient for SQLite/dev smoke runs but production PostgreSQL should still be managed with Alembic migrations and an explicitly verified `DATABASE_URL`/schema. If running inside a container, do not assume PostgreSQL on the host is reachable at `localhost`; set `DATABASE_URL` to the actual reachable host/IP.
+Expected JSON includes top-level `fetched`, `inserted`, `duplicates`, `filtered_old`, `source_counts`, and `errors`. Collection writes `news_sources` metadata, records `collection_runs`, normalizes/canonicalizes URLs, and upserts by unique `url_hash`. The no-explicit-session CLI path currently calls `Base.metadata.create_all(engine)` before opening a session, which is convenient for SQLite/dev smoke runs; production PostgreSQL should still be managed with Alembic migrations and an explicitly verified `DATABASE_URL`/schema.
 
 For PostgreSQL verification, set `DATABASE_URL` explicitly and run `daily-news db-smoke`. The smoke command verifies required tables and inserts a unique source/article/event/link/collection run. `tests/test_postgres_integration.py` calls the same function and skips unless `DATABASE_URL` is present.
 
+## Repo-local scripts and operator entry points
 
-## Cron/Hermes wrappers
-
-Use the repository-local wrappers for scheduling rather than embedding long `uv run daily-news ...` commands in cron. They are POSIX `sh` scripts, executable, safe to invoke from any current working directory, and resolve the repo root from their own location.
-
-Dedicated Hermes cron mounting/scheduling details live in [`docs/hermes_cron.md`](hermes_cron.md); keep this section as a summary and do not duplicate that full runbook here.
-
-Common behavior:
-
-- preserve caller-provided `DATABASE_URL`, API keys, and other environment values;
-- optionally load `/opt/data/plugins/Daily_news/.env` for variables that are not already set;
-- default `UV_PROJECT_ENVIRONMENT=.venv` unless the caller sets another value;
-- run the CLI through `uv run daily-news` from the repository root.
-
-Commands:
+Currently committed `scripts/` entry points include:
 
 ```bash
-# Defaults: NEWS_SOURCE/all and LOOKBACK_HOURS/1.
-/opt/data/plugins/Daily_news/scripts/cron_collect.sh
-/opt/data/plugins/Daily_news/scripts/cron_collect.sh rss 24
-NEWS_SOURCE=gdelt LOOKBACK_HOURS=6 /opt/data/plugins/Daily_news/scripts/cron_collect.sh
+# Build structured domain candidates from the last 24 hours.
+UV_PROJECT_ENVIRONMENT=.venv uv run python scripts/domain_summarizer.py --lookback-hours 24
 
-# Defaults: LOOKBACK_HOURS/24 and LIMIT/10.
-/opt/data/plugins/Daily_news/scripts/cron_build_daily_events.sh
-/opt/data/plugins/Daily_news/scripts/cron_build_daily_events.sh 48 20
-LOOKBACK_HOURS=48 LIMIT=20 /opt/data/plugins/Daily_news/scripts/cron_build_daily_events.sh
-
-# Default: LOOKBACK_MINUTES/60.
-/opt/data/plugins/Daily_news/scripts/cron_watch_breaking.sh
-/opt/data/plugins/Daily_news/scripts/cron_watch_breaking.sh 180
-LOOKBACK_MINUTES=180 /opt/data/plugins/Daily_news/scripts/cron_watch_breaking.sh
+# Fast RSS-only collection for breaking monitoring.
+UV_PROJECT_ENVIRONMENT=.venv uv run python scripts/collect_rss_quick.py --lookback-hours 2
 ```
 
-Hermes cron example command entries, assuming PostgreSQL is already provisioned and reachable:
+Operator notes:
 
-```bash
-DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_news' /opt/data/plugins/Daily_news/scripts/cron_collect.sh
-DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_news' /opt/data/plugins/Daily_news/scripts/cron_build_daily_events.sh
-DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_news' /opt/data/plugins/Daily_news/scripts/cron_watch_breaking.sh
-```
-
-Do not claim these jobs are installed unless a separate scheduler/Hermes cron action actually creates them.
+- `scripts/domain_summarizer.py` is a candidate-generation step, not the final production summarizer.
+- Its output is intended for downstream Hermes automation.
+- Cron scheduling and Hermes profile definitions are external operational concerns and are not committed here.
+- Avoid documenting ephemeral Discord IDs or thread IDs in repo docs unless there is a strong operational reason.
 
 ## API
 
@@ -187,7 +184,7 @@ Important files/directories:
 - `src/news_system/db/session.py` — session/engine setup.
 - `src/news_system/storage/` — repository helpers.
 - `alembic.ini` — Alembic config.
-- `alembic/versions/0001_create_news_tables.py` — initial migration.
+- `alembic/versions/` — migration files.
 
 Default Alembic URL in `alembic.ini`:
 
@@ -204,10 +201,10 @@ UV_PROJECT_ENVIRONMENT=.venv uv run alembic upgrade head
 ## Main directories
 
 - `src/news_system/collectors/` — collectors for configured sources.
-- `src/news_system/processors/` — normalization, de-duplication, event clustering, scoring, breaking detection.
+- `src/news_system/processors/` — normalization, de-duplication, clustering, scoring, breaking detection, and domain summarizer logic.
 - `src/news_system/jobs/` — orchestration functions used by the CLI.
 - `src/news_system/api/` — FastAPI app.
-- `scripts/` — repo-local cron/Hermes shell wrappers.
+- `scripts/` — repo-local helper scripts for candidate generation and fast RSS collection.
 - `src/news_system/db/` — database models and session setup.
 - `src/news_system/storage/` — persistence/repository helpers.
 - `tests/` — pytest unit tests.
@@ -220,5 +217,5 @@ UV_PROJECT_ENVIRONMENT=.venv uv run alembic upgrade head
 - Do not rename the internal package namespace from `news_system` without a separate migration plan.
 - Do not confuse package-name normalization in lockfiles or wheels with the required `pyproject.toml` name.
 - Keep README.md in English and `docs/README_CN.md` as the matching Traditional Chinese version.
-- This repo currently has no LLM, Discord, frontend, or multi-agent runtime; do not document those as implemented features.
+- When documenting capabilities, distinguish clearly between what is committed in this repo and what the production Hermes workflow adds around it.
 - Do not commit changes unless explicitly instructed.

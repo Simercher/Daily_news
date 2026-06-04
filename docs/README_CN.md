@@ -1,21 +1,116 @@
 # Daily_news
 
-Daily_news 是一個 Python 新聞資料層 MVP。它會從設定好的來源收集文章，正規化並儲存文章與事件資料，執行確定性的去重、聚類與評分流程，並透過 CLI 與 FastAPI app 提供讀取介面。
+Daily_news 是新聞摘要系統的資料與處理核心。這個 repository 內包含從設定來源收集文章、正規化並儲存文章與事件資料、執行確定性的去重、聚類、評分與 breaking-news 偵測，並透過 CLI 與 FastAPI app 提供讀取介面。
 
 `pyproject.toml` 裡的 Python distribution/project 名稱是 `Daily_news`。命令列進入點是 `daily-news`。內部 Python package namespace 仍保留 `news_system`，以相容既有程式碼結構。
 
-## 目前範圍
+## 範圍與邊界
 
-這個 repository 目前只實作新聞資料層：
+這個 repository 目前包含核心 pipeline 邏輯：
 
 - RSS、NewsAPI、GDELT 輸入來源的 collectors；
 - SQLAlchemy models 與 repository helpers；
 - PostgreSQL 的 Alembic migration scaffold；
-- 正規化、URL 去重、事件聚類、評分與 breaking-news 偵測；
-- 用於收集與事件顯示的 CLI jobs；
+- 正規化、URL 去重、事件聚類、評分、breaking-news 偵測，以及 domain candidate 產生；
+- 用於收集、事件建構與結構化候選輸出的 CLI jobs 與 repo-local helper scripts；
 - Daily、breaking、單一事件檢視的 FastAPI read endpoints。
 
-它目前**不**包含 LLM 摘要、Discord 發送、前端，或 multi-agent orchestration layer。
+重要邊界如下：
+
+- **repo 內程式碼**：確定性的收集、處理、儲存與結構化輸出。
+- **repo 外的正式營運層**：Hermes profile、cron 排程、最終 LLM 推理、繁體中文摘要撰寫，以及 Discord forum 發送。
+
+因此，這個 repository 本身沒有把 Hermes profile 或 cron scheduler 以 committed code 的方式放進來；但**目前實際上線的 production workflow 確實有包含 LLM 摘要與 Discord 發送**。
+
+## 系統架構
+
+```mermaid
+flowchart LR
+    subgraph Sources[外部新聞來源]
+        RSS[RSS feeds]
+        NewsAPI[NewsAPI]
+        GDELT[GDELT]
+    end
+
+    subgraph Repo[Daily_news repository]
+        Collect[Collectors + CLI 收集 jobs]
+        DB[(PostgreSQL / SQLAlchemy)]
+        Process[正規化 / 去重 / 聚類 / 評分]
+        Break[Breaking-news 偵測]
+        Domain[domain_summarizer.py\n結構化 JSON + rule_domain hints]
+        API[FastAPI read API]
+    end
+
+    subgraph Ops[repo 外營運層]
+        Hermes[Hermes profile: news-briefing-writer]
+        Cron[Cron / Hermes cron scheduler]
+        Discord[Discord forum + notification threads]
+    end
+
+    RSS --> Collect
+    NewsAPI --> Collect
+    GDELT --> Collect
+    Cron --> Collect
+    Collect --> DB
+    DB --> Process
+    Process --> Break
+    Process --> Domain
+    DB --> API
+    Domain --> Hermes
+    Break --> Hermes
+    Cron --> Hermes
+    Hermes --> Discord
+```
+
+## 正式營運 / Production pipeline
+
+目前的 production system 是由本 repo 加上外部 Hermes 營運層共同組成。
+
+### Daily-news flow
+
+1. 以 `daily-news collect --lookback-hours 24` 收集文章（或由 operator/cron wrapper 包裝後執行）。
+2. 以 `scripts/domain_summarizer.py --lookback-hours 24` 建立 domain candidate JSON。
+3. 由外部 Hermes profile `news-briefing-writer` 進行最終 LLM 推理、動態挑選 domains、撰寫最終繁體中文摘要，並發送到 Discord。
+
+目前應明確記錄的行為：
+
+- `scripts/domain_summarizer.py` 現在預設會查詢 **lookback window 內所有非重複文章**。
+- `--limit` 是可選的，只有顯式傳入時才會限制查詢數量。
+- 這個 script 會輸出 structured JSON candidates 與 `rule_domain` hints。
+- `rule_domain` 是確定性規則提供的參考值，**不是** production 中最後採用的 domain 決策。
+- 最終 domain selection 由外部 Hermes profile 處理，而每個領域實際收錄的文章數量是**動態**的——通常約每個領域 4–10 則文章，而不是固定 5 則。
+
+### Breaking-news flow
+
+1. 以 `scripts/collect_rss_quick.py --lookback-hours 2` 執行快速 RSS-only collection。
+2. 執行 `daily-news watch-breaking --lookback-minutes 120 --limit 10`。
+3. 若存在 breaking events，營運層會發送到 Discord forum，並通知專用 notification thread；若沒有事件則保持安靜。
+
+因此，這個 repository 應被理解為 daily 與 breaking news 的**處理引擎**，而 Hermes 負責最終推理、格式化與聊天室投遞。
+
+## 端到端流程圖
+
+```mermaid
+flowchart TD
+    Start([排程觸發]) --> Decide{流程類型}
+
+    Decide -->|Daily news| D1[daily-news collect\n--lookback-hours 24]
+    D1 --> D2[(Articles in PostgreSQL)]
+    D2 --> D3[scripts/domain_summarizer.py\n--lookback-hours 24]
+    D3 --> D4[Structured JSON candidates\n+ rule_domain hints]
+    D4 --> D5[Hermes profile\nnews-briefing-writer]
+    D5 --> D6[LLM 推理]
+    D6 --> D7[動態每領域選材\n通常 4-10 則文章]
+    D7 --> D8[繁體中文摘要]
+    D8 --> D9[發送到 Discord forum]
+
+    Decide -->|Breaking news| B1[scripts/collect_rss_quick.py\n--lookback-hours 2]
+    B1 --> B2[daily-news watch-breaking\n--lookback-minutes 120 --limit 10]
+    B2 --> B3{有 breaking events 嗎？}
+    B3 -->|No| B4[保持安靜 / 不發送]
+    B3 -->|Yes| B5[發送 breaking update 到 Discord forum]
+    B5 --> B6[通知專用 Discord thread]
+```
 
 ## 安裝
 
@@ -76,45 +171,24 @@ DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_ne
 
 如果 PostgreSQL 是跑在 host 而 CLI 在 container 內執行，`localhost` 可能指向 container 本身；請將 `DATABASE_URL` 改成可連到 host 的名稱/IP（例如環境支援時使用 `host.docker.internal`）。
 
+## Scripts 與 operator 入口
 
-## Cron/Hermes wrappers
-
-Repository 內的 `scripts/` 提供適合 cron 或 Hermes cron 使用的 shell wrappers，可從任何目前工作目錄執行。它們會依照 script 位置解析 repository root、選擇性讀取 repo-local `.env` 且不覆蓋已由呼叫端設定的環境變數，預設 `UV_PROJECT_ENVIRONMENT=.venv`，再執行 `uv run daily-news ...`。
-
-Hermes cron 排程與掛載方式的專門 runbook 請見 [`docs/hermes_cron.md`](hermes_cron.md)；本節只保留摘要，避免重複太多設定細節。
-
-Wrappers 與預設值：
+目前 repo 內已提交的 `scripts/` 包含：
 
 ```bash
-# 收集最近 1 小時所有設定來源。
-scripts/cron_collect.sh
+# 產生最近 24 小時的 structured domain candidates。
+UV_PROJECT_ENVIRONMENT=.venv uv run python scripts/domain_summarizer.py --lookback-hours 24
 
-# 以最近 24 小時建立 daily events，limit 預設 10。
-scripts/cron_build_daily_events.sh
-
-# 偵測最近 60 分鐘的 breaking events。
-scripts/cron_watch_breaking.sh
+# 提供 breaking monitoring 使用的快速 RSS-only collection。
+UV_PROJECT_ENVIRONMENT=.venv uv run python scripts/collect_rss_quick.py --lookback-hours 2
 ```
 
-可用環境變數或 positional arguments 覆蓋預設值：
+Operator 備註：
 
-```bash
-# Positional overrides：source、lookback hours。
-scripts/cron_collect.sh rss 24
-
-# Environment overrides。
-NEWS_SOURCE=gdelt LOOKBACK_HOURS=6 scripts/cron_collect.sh
-LOOKBACK_HOURS=48 LIMIT=20 scripts/cron_build_daily_events.sh
-LOOKBACK_MINUTES=180 scripts/cron_watch_breaking.sh
-```
-
-請在 Hermes cron 環境或 `.env` 設定 `DATABASE_URL` 與 provider API keys；呼叫端已設定的環境變數優先於 `.env`。Hermes cron command entries 範例（請在 Hermes cron 建立，不是在此 repo 中建立）：
-
-```bash
-DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_news' /opt/data/plugins/Daily_news/scripts/cron_collect.sh
-DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_news' /opt/data/plugins/Daily_news/scripts/cron_build_daily_events.sh
-DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_news' /opt/data/plugins/Daily_news/scripts/cron_watch_breaking.sh
-```
+- `scripts/domain_summarizer.py` 不負責 production 中最後的 LLM/domain 決策。
+- 它的輸出是提供下游 Hermes automation 使用。
+- Cron 排程與 Hermes profile 定義屬於 repo 外的營運議題，未提交在此處。
+- 本文件刻意不記錄短期、聊天室專用的 Discord thread ID。
 
 ## API
 
@@ -162,10 +236,10 @@ DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_ne
 - `src/news_system/collectors/` — 來源 collectors。
 - `src/news_system/db/` — SQLAlchemy schema 與 database session setup。
 - `src/news_system/storage/` — repository/storage helpers。
-- `src/news_system/processors/` — 正規化、去重、聚類、評分與 breaking detection 邏輯。
+- `src/news_system/processors/` — 正規化、去重、聚類、評分、breaking detection 與 domain summarizer 邏輯。
 - `src/news_system/jobs/` — CLI job orchestration。
 - `src/news_system/api/` — FastAPI app。
-- `scripts/` — repo-local cron/Hermes shell wrappers。
+- `scripts/` — repo-local helper scripts，提供 candidate generation 與快速 collection。
 - `tests/` — unit tests。
 - `alembic/` — database migrations。
 - `docs/` — 人類與 agent 使用的文件。
@@ -175,3 +249,4 @@ DATABASE_URL='postgresql+psycopg://daily_news:daily_news@localhost:5432/daily_ne
 - Generated runtime data 不屬於目前 source tree；舊的 `data/` 與 `legacy/` 目錄已移除。
 - `uv.lock` 可能會把 distribution name normalization 成 `daily-news`；這是預期行為。`pyproject.toml` 請保持 `name = "Daily_news"`。
 - 討論 imports 或 source paths 時，保留內部 namespace `news_system`。
+- 描述能力時，請清楚區分 repo 內已提交的內容，以及 production Hermes workflow 在 repo 外增加的能力。
