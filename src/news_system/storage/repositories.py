@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import Iterable
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from news_system.db.models import ArticleModel, CollectionRun, EventArticle, EventModel, NewsSource
@@ -66,6 +66,42 @@ class ArticleRepository:
 
     def list(self, limit: int = 100) -> list[ArticleModel]:
         return list(self.db.execute(select(ArticleModel).order_by(ArticleModel.published_at.desc()).limit(limit)).scalars())
+
+    def search(
+        self,
+        query: str,
+        *,
+        limit: int = 20,
+        lookback_hours: int | None = None,
+        source: str | None = None,
+        category: str | None = None,
+        include_duplicates: bool = False,
+    ) -> list[ArticleModel]:
+        term = query.strip().lower()
+        stmt = select(ArticleModel)
+        if term:
+            pattern = f"%{term}%"
+            stmt = stmt.where(
+                or_(
+                    func.lower(func.coalesce(ArticleModel.title, "")).like(pattern),
+                    func.lower(func.coalesce(ArticleModel.description, "")).like(pattern),
+                    func.lower(func.coalesce(ArticleModel.content_snippet, "")).like(pattern),
+                )
+            )
+        if lookback_hours is not None:
+            since = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
+            stmt = stmt.where(ArticleModel.published_at >= since)
+        if source:
+            stmt = stmt.where(ArticleModel.source_name == source)
+        if category:
+            stmt = stmt.where(ArticleModel.category == category)
+        if not include_duplicates:
+            stmt = stmt.where(ArticleModel.is_duplicate == False)
+        stmt = stmt.order_by(ArticleModel.published_at.desc(), ArticleModel.id.desc()).limit(limit)
+        rows = list(self.db.execute(stmt).scalars())
+        for row in rows:
+            row.ensure_utc()
+        return rows
 
 
 class EventRepository:

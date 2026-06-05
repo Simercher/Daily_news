@@ -28,7 +28,7 @@ from news_system.processors.fulltext import extract_articles
 from news_system.processors.fulltext_quality import compute_fulltext_quality
 from news_system.processors.representative_articles import select_representative
 from news_system.processors.scorer import score_event
-from news_system.serializers import event_to_dict, events_payload
+from news_system.serializers import article_to_dict, event_to_dict, events_payload
 from news_system.storage.repositories import ArticleRepository, EventRepository
 from news_system.storage.smoke import run_db_smoke
 from sqlalchemy import delete, select, text, update
@@ -42,6 +42,16 @@ def _session():
     engine = get_engine()
     Base.metadata.create_all(engine)
     return get_session_local()()
+
+
+def _validate_search_args(args) -> str | None:
+    if args.limit <= 0:
+        return "--limit must be a positive integer"
+    if args.lookback_hours < 0:
+        return "--lookback-hours must be zero or greater"
+    if not args.query.strip():
+        return "query must not be blank"
+    return None
 
 
 def main(argv=None):
@@ -67,6 +77,14 @@ def main(argv=None):
     watch = sub.add_parser("watch-breaking")
     watch.add_argument("--lookback-minutes", type=int, default=60)
     watch.add_argument("--limit", type=int, default=20)
+
+    search = sub.add_parser("search")
+    search.add_argument("query")
+    search.add_argument("--limit", type=int, default=20)
+    search.add_argument("--lookback-hours", type=int, default=24)
+    search.add_argument("--source", type=str, default=None)
+    search.add_argument("--category", type=str, default=None)
+    search.add_argument("--include-duplicates", action="store_true", default=False)
 
     show_daily = sub.add_parser("show-daily")
     show_daily.add_argument("--date", required=True)
@@ -131,6 +149,39 @@ def main(argv=None):
             try:
                 events = breaking_watch_job(db, since_minutes=args.lookback_minutes, limit=args.limit)
                 _json(events_payload(events, lookback_minutes=args.lookback_minutes, limit=args.limit))
+            finally:
+                db.close()
+        elif args.cmd == "search":
+            validation_error = _validate_search_args(args)
+            if validation_error:
+                _json({"cmd": "search", "error": validation_error})
+                return
+            db = _session()
+            try:
+                articles = ArticleRepository(db).search(
+                    args.query,
+                    limit=args.limit,
+                    lookback_hours=args.lookback_hours,
+                    source=args.source,
+                    category=args.category,
+                    include_duplicates=args.include_duplicates,
+                )
+                payload_articles = []
+                for article in articles:
+                    item = article_to_dict(article)
+                    item["content_snippet"] = article.content_snippet
+                    payload_articles.append(item)
+                _json({
+                    "cmd": "search",
+                    "query": args.query,
+                    "lookback_hours": args.lookback_hours,
+                    "limit": args.limit,
+                    "source": args.source,
+                    "category": args.category,
+                    "include_duplicates": args.include_duplicates,
+                    "count": len(payload_articles),
+                    "articles": payload_articles,
+                })
             finally:
                 db.close()
         elif args.cmd == "show-breaking":
