@@ -28,7 +28,8 @@ from news_system.processors.fulltext import extract_articles
 from news_system.processors.fulltext_quality import compute_fulltext_quality
 from news_system.processors.representative_articles import select_representative
 from news_system.processors.scorer import score_event
-from news_system.serializers import article_to_dict, event_to_dict, events_payload
+from news_system.serializers import events_payload, search_query_plan_to_dict, search_result_to_dict
+from news_system.search.query_parser import SearchQueryError, parse_search_query
 from news_system.storage.repositories import ArticleRepository, EventRepository
 from news_system.storage.smoke import run_db_smoke
 from sqlalchemy import delete, select, text, update
@@ -156,21 +157,22 @@ def main(argv=None):
             if validation_error:
                 _json({"cmd": "search", "error": validation_error})
                 return
+            try:
+                parsed_query = parse_search_query(args.query)
+            except SearchQueryError as exc:
+                _json({"cmd": "search", "error": str(exc)})
+                return
             db = _session()
             try:
-                articles = ArticleRepository(db).search(
-                    args.query,
+                results = ArticleRepository(db).search_parsed(
+                    parsed_query,
                     limit=args.limit,
                     lookback_hours=args.lookback_hours,
                     source=args.source,
                     category=args.category,
                     include_duplicates=args.include_duplicates,
                 )
-                payload_articles = []
-                for article in articles:
-                    item = article_to_dict(article)
-                    item["content_snippet"] = article.content_snippet
-                    payload_articles.append(item)
+                payload_articles = [search_result_to_dict(result) for result in results]
                 _json({
                     "cmd": "search",
                     "query": args.query,
@@ -179,6 +181,7 @@ def main(argv=None):
                     "source": args.source,
                     "category": args.category,
                     "include_duplicates": args.include_duplicates,
+                    "query_plan": search_query_plan_to_dict(parsed_query),
                     "count": len(payload_articles),
                     "articles": payload_articles,
                 })

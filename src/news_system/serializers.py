@@ -4,6 +4,7 @@ from datetime import date, datetime
 
 from news_system.db.models import ArticleModel, EventModel
 from news_system.processors.scorer import _get_credibility
+from news_system.search.types import SearchQuery, SearchResult
 
 
 def _iso(value):
@@ -34,6 +35,27 @@ def article_to_dict(article: ArticleModel) -> dict:
         "description": article.description,
         "is_duplicate": article.is_duplicate,
     }
+
+
+def search_query_plan_to_dict(query: SearchQuery) -> dict:
+    return {
+        "must_terms": query.must_terms,
+        "should_terms": query.should_terms,
+        "must_not_terms": query.must_not_terms,
+        "must_phrases": query.must_phrases,
+        "should_phrases": query.should_phrases,
+        "must_not_phrases": query.must_not_phrases,
+        "has_explicit_or": query.has_explicit_or,
+    }
+
+
+def search_result_to_dict(result: SearchResult) -> dict:
+    item = article_to_dict(result.article)
+    item["content_snippet"] = result.article.content_snippet
+    item["score"] = result.score
+    item["matched_fields"] = result.matched_fields
+    item["matched_terms"] = result.matched_terms
+    return item
 
 
 def select_representative_articles(articles: list[ArticleModel]) -> list[ArticleModel]:

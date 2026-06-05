@@ -3,11 +3,14 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import Iterable
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from news_system.db.models import ArticleModel, CollectionRun, EventArticle, EventModel, NewsSource
 from news_system.processors.normalizer import canonicalize_url, content_hash, normalize_title, title_hash, url_hash
+from news_system.search.query_parser import parse_search_query
+from news_system.search.scoring import build_filter_expressions, build_score_expression, compute_python_match_metadata
+from news_system.search.types import SearchQuery, SearchResult
 
 
 class SourceRepository:
@@ -76,18 +79,31 @@ class ArticleRepository:
         source: str | None = None,
         category: str | None = None,
         include_duplicates: bool = False,
-    ) -> list[ArticleModel]:
-        term = query.strip().lower()
-        stmt = select(ArticleModel)
-        if term:
-            pattern = f"%{term}%"
-            stmt = stmt.where(
-                or_(
-                    func.lower(func.coalesce(ArticleModel.title, "")).like(pattern),
-                    func.lower(func.coalesce(ArticleModel.description, "")).like(pattern),
-                    func.lower(func.coalesce(ArticleModel.content_snippet, "")).like(pattern),
-                )
-            )
+    ) -> list[SearchResult]:
+        parsed = parse_search_query(query)
+        return self.search_parsed(
+            parsed,
+            limit=limit,
+            lookback_hours=lookback_hours,
+            source=source,
+            category=category,
+            include_duplicates=include_duplicates,
+        )
+
+    def search_parsed(
+        self,
+        query: SearchQuery,
+        *,
+        limit: int = 20,
+        lookback_hours: int | None = None,
+        source: str | None = None,
+        category: str | None = None,
+        include_duplicates: bool = False,
+    ) -> list[SearchResult]:
+        score_expr = build_score_expression(query).label("search_score")
+        stmt = select(ArticleModel, score_expr)
+        for filter_expr in build_filter_expressions(query):
+            stmt = stmt.where(filter_expr)
         if lookback_hours is not None:
             since = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
             stmt = stmt.where(ArticleModel.published_at >= since)
@@ -97,11 +113,21 @@ class ArticleRepository:
             stmt = stmt.where(ArticleModel.category == category)
         if not include_duplicates:
             stmt = stmt.where(ArticleModel.is_duplicate == False)
-        stmt = stmt.order_by(ArticleModel.published_at.desc(), ArticleModel.id.desc()).limit(limit)
-        rows = list(self.db.execute(stmt).scalars())
-        for row in rows:
-            row.ensure_utc()
-        return rows
+        stmt = stmt.order_by(score_expr.desc(), ArticleModel.published_at.desc(), ArticleModel.id.desc()).limit(limit)
+        rows = list(self.db.execute(stmt).all())
+        results: list[SearchResult] = []
+        for article, sql_score in rows:
+            article.ensure_utc()
+            python_score, matched_fields, matched_terms = compute_python_match_metadata(article, query)
+            results.append(
+                SearchResult(
+                    article=article,
+                    score=int(sql_score if sql_score is not None else python_score),
+                    matched_fields=matched_fields,
+                    matched_terms=matched_terms,
+                )
+            )
+        return results
 
 
 class EventRepository:

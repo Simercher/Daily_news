@@ -64,12 +64,13 @@ def test_article_repository_search_matches_title_description_and_content_with_li
     results = ArticleRepository(db).search("climate", limit=2, lookback_hours=24)
 
     assert len(results) == 2
-    assert title_hit in results
-    assert description_hit in results
-    assert content_hit not in results
+    result_articles = [result.article for result in results]
+    assert title_hit in result_articles
+    assert description_hit in result_articles
+    assert content_hit not in result_articles
 
     filtered = ArticleRepository(db).search("climate", source="Reuters", category="analysis", lookback_hours=24)
-    assert [article.id for article in filtered] == [content_hit.id]
+    assert [result.article.id for result in filtered] == [content_hit.id]
 
 
 def test_article_repository_search_uses_stable_id_tiebreaker_for_same_timestamp():
@@ -80,7 +81,7 @@ def test_article_repository_search_uses_stable_id_tiebreaker_for_same_timestamp(
 
     results = ArticleRepository(db).search("climate", lookback_hours=24, limit=10)
 
-    assert [article.id for article in results[:2]] == [newer_id.id, older_id.id]
+    assert [result.article.id for result in results[:2]] == [newer_id.id, older_id.id]
 
 
 def test_article_repository_search_excludes_duplicates_by_default_and_includes_them_when_requested():
@@ -102,8 +103,8 @@ def test_article_repository_search_excludes_duplicates_by_default_and_includes_t
         include_duplicates=True,
     )
 
-    assert [article.id for article in default_results] == [unique_article.id]
-    assert [article.id for article in include_duplicate_results] == [duplicate_article.id, unique_article.id]
+    assert [result.article.id for result in default_results] == [unique_article.id]
+    assert [result.article.id for result in include_duplicate_results] == [duplicate_article.id, unique_article.id]
 
 
 def test_cli_search_outputs_json_and_empty_result_for_filter(tmp_path):
@@ -141,6 +142,18 @@ def test_cli_search_outputs_json_and_empty_result_for_filter(tmp_path):
     assert payload["articles"][0]["source_name"] == "SpaceWire"
     assert payload["articles"][0]["url"] == "https://space.example/mars"
     assert payload["articles"][0]["description"] == "Mission planners prepare the spacecraft"
+    assert payload["query_plan"] == {
+        "must_terms": ["mars"],
+        "should_terms": [],
+        "must_not_terms": [],
+        "must_phrases": [],
+        "should_phrases": [],
+        "must_not_phrases": [],
+        "has_explicit_or": False,
+    }
+    assert payload["articles"][0]["score"] > 0
+    assert payload["articles"][0]["matched_fields"] == ["title"]
+    assert payload["articles"][0]["matched_terms"] == ["mars"]
 
     miss = subprocess.run(
         [sys.executable, "-m", "news_system.cli", "search", "mars", "--source", "OtherWire", "--lookback-hours", "24"],
@@ -194,3 +207,134 @@ def test_cli_search_rejects_invalid_limit_lookback_and_blank_query(tmp_path):
         check=True,
     )
     assert json.loads(blank_query.stdout) == {"cmd": "search", "error": "query must not be blank"}
+
+    unmatched_quote = subprocess.run(
+        [sys.executable, "-m", "news_system.cli", "search", '"query'],
+        cwd="/opt/data/plugins/Daily_news",
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert json.loads(unmatched_quote.stdout) == {"cmd": "search", "error": "unmatched quote in query"}
+
+
+def test_article_repository_search_supports_boolean_matching_and_ranking():
+    db, _ = make_session()
+    published_at = datetime(2026, 6, 5, 12, 0, tzinfo=timezone.utc)
+    strong_older = add_article(
+        db,
+        "Taiwan semiconductor exports rise",
+        "https://example.com/strong",
+        description="Taiwan semiconductor firms expand capacity",
+        content="Semiconductor supply chain update",
+        published_at=published_at - timedelta(hours=2),
+    )
+    weak_newer = add_article(
+        db,
+        "Regional market briefing",
+        "https://example.com/weak",
+        content="Investors mention taiwan semiconductor demand",
+        published_at=published_at - timedelta(hours=1),
+    )
+    sports = add_article(
+        db,
+        "Taiwan sports rights signed",
+        "https://example.com/sports",
+        content="A semiconductor sponsor is involved",
+        published_at=published_at,
+    )
+    tsmc = add_article(
+        db,
+        "TSMC factory update",
+        "https://example.com/tsmc",
+        published_at=published_at,
+    )
+    phrase = add_article(
+        db,
+        "South China Sea patrols increase",
+        "https://example.com/phrase",
+        description="Regional navies monitor the south china sea corridor",
+        published_at=published_at,
+    )
+
+    and_results = ArticleRepository(db).search("taiwan semiconductor", lookback_hours=24, limit=10)
+    assert and_results[0].article.id == strong_older.id
+    assert {result.article.id for result in and_results} == {strong_older.id, weak_newer.id, sports.id}
+    assert and_results[0].score > and_results[-1].score
+    assert and_results[0].matched_fields == ["title", "description", "content_snippet"]
+    assert and_results[0].matched_terms == ["taiwan", "semiconductor"]
+
+    not_results = ArticleRepository(db).search("taiwan semiconductor -sports", lookback_hours=24, limit=10)
+    assert sports.id not in [result.article.id for result in not_results]
+
+    or_results = ArticleRepository(db).search("taiwan OR tsmc", lookback_hours=24, limit=10)
+    assert {result.article.id for result in or_results} == {strong_older.id, weak_newer.id, sports.id, tsmc.id}
+
+    phrase_results = ArticleRepository(db).search('"south china sea"', lookback_hours=24, limit=10)
+    assert [result.article.id for result in phrase_results] == [phrase.id]
+
+
+def test_cli_search_v2_json_metadata_and_boolean_matching(tmp_path):
+    db_path = tmp_path / "search_v2.db"
+    db, engine = make_session(f"sqlite:///{db_path}")
+    article = add_article(
+        db,
+        "Taiwan watches South China Sea supply routes",
+        "https://example.com/supply-routes",
+        description="TSMC suppliers monitor the corridor",
+        content="Officials say south china sea shipping lanes matter to Taiwan",
+        source="Reuters",
+        category="world",
+    )
+    add_article(
+        db,
+        "Taiwan sports broadcast covers South China Sea race",
+        "https://example.com/sports-race",
+        description="TSMC is not involved",
+        content="south china sea race highlights",
+        source="Reuters",
+        category="world",
+    )
+    article_id = article.id
+    db.close()
+    engine.dispose()
+
+    env = {**os.environ, "DATABASE_URL": f"sqlite:///{db_path}", "PYTHONPATH": "src"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "news_system.cli",
+            "search",
+            '"south china sea" taiwan OR tsmc -sports',
+            "--source",
+            "Reuters",
+            "--category",
+            "world",
+            "--lookback-hours",
+            "24",
+        ],
+        cwd="/opt/data/plugins/Daily_news",
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    payload = json.loads(result.stdout)
+    assert payload["query_plan"] == {
+        "must_terms": ["taiwan"],
+        "should_terms": ["tsmc"],
+        "must_not_terms": ["sports"],
+        "must_phrases": ["south china sea"],
+        "should_phrases": [],
+        "must_not_phrases": [],
+        "has_explicit_or": True,
+    }
+    assert payload["count"] == 1
+    assert payload["articles"][0]["id"] == article_id
+    assert payload["articles"][0]["score"] > 0
+    assert payload["articles"][0]["matched_fields"] == ["title", "description", "content_snippet"]
+    assert payload["articles"][0]["matched_terms"] == ["taiwan", "tsmc", "south china sea"]
+    assert payload["articles"][0]["content_snippet"] == "Officials say south china sea shipping lanes matter to Taiwan"
