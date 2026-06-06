@@ -5,9 +5,11 @@ from typing import Iterable
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import Select
 
 from news_system.db.models import ArticleModel, CollectionRun, EventArticle, EventModel, NewsSource
 from news_system.processors.normalizer import canonicalize_url, content_hash, normalize_title, title_hash, url_hash
+from news_system.search.postgres_fts import build_rank_expression, compile_postgres_fts_query
 from news_system.search.query_parser import parse_search_query
 from news_system.search.scoring import build_filter_expressions, build_score_expression, compute_python_match_metadata
 from news_system.search.types import SearchQuery, SearchResult
@@ -100,10 +102,39 @@ class ArticleRepository:
         category: str | None = None,
         include_duplicates: bool = False,
     ) -> list[SearchResult]:
-        score_expr = build_score_expression(query).label("search_score")
-        stmt = select(ArticleModel, score_expr)
-        for filter_expr in build_filter_expressions(query):
-            stmt = stmt.where(filter_expr)
+        if self._search_backend_name() == "postgresql":
+            return self._search_postgres_fts(
+                query,
+                limit=limit,
+                lookback_hours=lookback_hours,
+                source=source,
+                category=category,
+                include_duplicates=include_duplicates,
+            )
+        return self._search_sqlite_like(
+            query,
+            limit=limit,
+            lookback_hours=lookback_hours,
+            source=source,
+            category=category,
+            include_duplicates=include_duplicates,
+        )
+
+    def _search_backend_name(self) -> str:
+        get_bind = getattr(self.db, "get_bind", None)
+        bind = get_bind() if callable(get_bind) else getattr(self.db, "bind", None)
+        dialect_name = getattr(getattr(bind, "dialect", None), "name", "")
+        return "postgresql" if dialect_name == "postgresql" else "sqlite"
+
+    def _apply_repository_search_filters(
+        self,
+        stmt: Select,
+        *,
+        lookback_hours: int | None,
+        source: str | None,
+        category: str | None,
+        include_duplicates: bool,
+    ) -> Select:
         if lookback_hours is not None:
             since = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
             stmt = stmt.where(ArticleModel.published_at >= since)
@@ -113,8 +144,9 @@ class ArticleRepository:
             stmt = stmt.where(ArticleModel.category == category)
         if not include_duplicates:
             stmt = stmt.where(ArticleModel.is_duplicate == False)
-        stmt = stmt.order_by(score_expr.desc(), ArticleModel.published_at.desc(), ArticleModel.id.desc()).limit(limit)
-        rows = list(self.db.execute(stmt).all())
+        return stmt
+
+    def _rows_to_search_results(self, rows, query: SearchQuery) -> list[SearchResult]:
         results: list[SearchResult] = []
         for article, sql_score in rows:
             article.ensure_utc()
@@ -128,6 +160,57 @@ class ArticleRepository:
                 )
             )
         return results
+
+    def _search_sqlite_like(
+        self,
+        query: SearchQuery,
+        *,
+        limit: int,
+        lookback_hours: int | None,
+        source: str | None,
+        category: str | None,
+        include_duplicates: bool,
+    ) -> list[SearchResult]:
+        score_expr = build_score_expression(query).label("search_score")
+        stmt = select(ArticleModel, score_expr)
+        for filter_expr in build_filter_expressions(query):
+            stmt = stmt.where(filter_expr)
+        stmt = self._apply_repository_search_filters(
+            stmt,
+            lookback_hours=lookback_hours,
+            source=source,
+            category=category,
+            include_duplicates=include_duplicates,
+        )
+        stmt = stmt.order_by(score_expr.desc(), ArticleModel.published_at.desc(), ArticleModel.id.desc()).limit(limit)
+        rows = list(self.db.execute(stmt).all())
+        return self._rows_to_search_results(rows, query)
+
+    def _search_postgres_fts(
+        self,
+        query: SearchQuery,
+        *,
+        limit: int,
+        lookback_hours: int | None,
+        source: str | None,
+        category: str | None,
+        include_duplicates: bool,
+    ) -> list[SearchResult]:
+        compiled = compile_postgres_fts_query(query)
+        score_expr = build_rank_expression(ArticleModel.search_vector, compiled).label("search_score")
+        stmt = select(ArticleModel, score_expr)
+        for filter_expr in build_filter_expressions(query):
+            stmt = stmt.where(filter_expr)
+        stmt = self._apply_repository_search_filters(
+            stmt,
+            lookback_hours=lookback_hours,
+            source=source,
+            category=category,
+            include_duplicates=include_duplicates,
+        )
+        stmt = stmt.order_by(score_expr.desc(), ArticleModel.published_at.desc(), ArticleModel.id.desc()).limit(limit)
+        rows = list(self.db.execute(stmt).all())
+        return self._rows_to_search_results(rows, query)
 
 
 class EventRepository:

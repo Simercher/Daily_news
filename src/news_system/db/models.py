@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
-from sqlalchemy import ARRAY, BigInteger, Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import ARRAY, BigInteger, Boolean, Date, DateTime, FetchedValue, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
     pass
+
+
+search_vector_type = postgresql.TSVECTOR().with_variant(Text(), "sqlite")
 
 
 def now_utc() -> datetime:
@@ -77,6 +81,13 @@ class ArticleModel(Base):
     fulltext_quality_score: Mapped[float] = mapped_column(Float, default=0.0)
     fulltext_extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     fulltext_error_message: Mapped[str | None] = mapped_column(Text)
+    search_vector: Mapped[str | None] = mapped_column(
+        search_vector_type,
+        nullable=True,
+        server_default=FetchedValue(),
+        server_onupdate=FetchedValue(),
+        _omit_from_statements=True,
+    )
 
     duplicate_of: Mapped["ArticleModel | None"] = relationship("ArticleModel", remote_side=[id])
 

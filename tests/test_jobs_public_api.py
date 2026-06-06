@@ -22,13 +22,14 @@ def test_jobs_package_public_api_is_stable():
         assert callable(obj)
 
 
-def test_jobs_collect_job_uses_package_level_load_collectors(monkeypatch):
+def test_jobs_collect_job_uses_package_level_load_collectors(monkeypatch, tmp_path):
     seen = {}
 
     def fake_load_collectors(source, config_path):
         seen["call"] = (source, config_path)
         return []
 
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'collect.db'}")
     monkeypatch.setattr("news_system.jobs._load_collectors", fake_load_collectors)
     result = collect_job(None, "rss", 24, None, "custom.yaml")
 

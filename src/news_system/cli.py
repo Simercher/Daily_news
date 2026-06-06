@@ -20,7 +20,8 @@ if _env_path.exists():
             os.environ.setdefault(key.strip(), val.strip())
 
 from news_system.config.sources import SourceConfigError, load_sources
-from news_system.db.models import ArticleModel, Base, EventArticle, EventModel
+from news_system.db.models import ArticleModel, EventArticle, EventModel
+from news_system.db.schema import prepare_schema
 from news_system.db.session import get_engine, get_session_local
 from news_system.jobs import collect_job, daily_event_job, breaking_watch_job
 from news_system.processors.event_fingerprint import generate_fingerprint
@@ -32,16 +33,20 @@ from news_system.serializers import events_payload, search_query_plan_to_dict, s
 from news_system.search.query_parser import SearchQueryError, parse_search_query
 from news_system.storage.repositories import ArticleRepository, EventRepository
 from news_system.storage.smoke import run_db_smoke
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import delete, select, update
 
 
 def _json(data):
     print(json.dumps(data, ensure_ascii=False, sort_keys=True))
 
 
+def _prepare_schema_for_cli(engine) -> None:
+    prepare_schema(engine, usage="the daily-news CLI")
+
+
 def _session():
     engine = get_engine()
-    Base.metadata.create_all(engine)
+    _prepare_schema_for_cli(engine)
     return get_session_local()()
 
 

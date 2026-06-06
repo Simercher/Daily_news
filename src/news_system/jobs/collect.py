@@ -75,10 +75,10 @@ def collect_job(db: Session | None = None, source: str = "all", lookback_hours: 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
     owns_db = db is None
     if owns_db:
-        from news_system.db.models import Base
+        from news_system.db.schema import prepare_schema
         from news_system.db.session import get_engine, get_session_local
         engine = get_engine()
-        Base.metadata.create_all(engine)
+        prepare_schema(engine, usage="daily-news collect")
         db = get_session_local()()
 
     assert db is not None

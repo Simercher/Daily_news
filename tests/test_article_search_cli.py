@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -12,6 +13,9 @@ from sqlalchemy.pool import StaticPool
 
 from news_system.db.models import ArticleModel, Base
 from news_system.storage.repositories import ArticleRepository
+
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def make_session(url="sqlite:///:memory:"):
@@ -125,7 +129,7 @@ def test_cli_search_outputs_json_and_empty_result_for_filter(tmp_path):
     env = {**os.environ, "DATABASE_URL": f"sqlite:///{db_path}", "PYTHONPATH": "src"}
     hit = subprocess.run(
         [sys.executable, "-m", "news_system.cli", "search", "mars", "--lookback-hours", "24", "--limit", "5"],
-        cwd="/opt/data/plugins/Daily_news",
+        cwd=REPO_ROOT,
         env=env,
         text=True,
         capture_output=True,
@@ -157,7 +161,7 @@ def test_cli_search_outputs_json_and_empty_result_for_filter(tmp_path):
 
     miss = subprocess.run(
         [sys.executable, "-m", "news_system.cli", "search", "mars", "--source", "OtherWire", "--lookback-hours", "24"],
-        cwd="/opt/data/plugins/Daily_news",
+        cwd=REPO_ROOT,
         env=env,
         text=True,
         capture_output=True,
@@ -180,7 +184,7 @@ def test_cli_search_rejects_invalid_limit_lookback_and_blank_query(tmp_path):
 
     invalid_limit = subprocess.run(
         [sys.executable, "-m", "news_system.cli", "search", "query", "--limit", "0"],
-        cwd="/opt/data/plugins/Daily_news",
+        cwd=REPO_ROOT,
         env=env,
         text=True,
         capture_output=True,
@@ -190,7 +194,7 @@ def test_cli_search_rejects_invalid_limit_lookback_and_blank_query(tmp_path):
 
     invalid_lookback = subprocess.run(
         [sys.executable, "-m", "news_system.cli", "search", "query", "--lookback-hours", "-1"],
-        cwd="/opt/data/plugins/Daily_news",
+        cwd=REPO_ROOT,
         env=env,
         text=True,
         capture_output=True,
@@ -200,7 +204,7 @@ def test_cli_search_rejects_invalid_limit_lookback_and_blank_query(tmp_path):
 
     blank_query = subprocess.run(
         [sys.executable, "-m", "news_system.cli", "search", "   "],
-        cwd="/opt/data/plugins/Daily_news",
+        cwd=REPO_ROOT,
         env=env,
         text=True,
         capture_output=True,
@@ -210,7 +214,7 @@ def test_cli_search_rejects_invalid_limit_lookback_and_blank_query(tmp_path):
 
     unmatched_quote = subprocess.run(
         [sys.executable, "-m", "news_system.cli", "search", '"query'],
-        cwd="/opt/data/plugins/Daily_news",
+        cwd=REPO_ROOT,
         env=env,
         text=True,
         capture_output=True,
@@ -315,7 +319,7 @@ def test_cli_search_v2_json_metadata_and_boolean_matching(tmp_path):
             "--lookback-hours",
             "24",
         ],
-        cwd="/opt/data/plugins/Daily_news",
+        cwd=REPO_ROOT,
         env=env,
         text=True,
         capture_output=True,
