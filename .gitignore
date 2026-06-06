@@ -20,5 +20,7 @@ external/
 docs/change_log_*.md
 docs/spec*.md
 docs/TODO*.md
+docs/plans/*
 .env
+
 

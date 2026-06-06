@@ -153,6 +153,20 @@ sources:
   ownership_type: private
   source_notes: UK progressive news outlet
   url: https://www.theguardian.com/technology/rss
+- name: Economist International
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 20
+  language: en
+  country: gb
+  category: world
+  credibility_score: 0.92
+  region: global
+  ownership_type: private
+  source_notes: The Economist international coverage RSS. Feed is live and includes short summaries/descriptions; article fulltext remains paywalled/premium on-site.
+  notes: RSS metadata is usable for headlines + brief summaries, but direct fulltext extraction is likely limited by paywall.
+  url: https://www.economist.com/international/rss.xml
 - name: Politico
   source_type: rss
   enabled: true
@@ -191,6 +205,21 @@ sources:
   ownership_type: public
   source_notes: US public radio. RSS has full summaries. Free access.
   url: https://feeds.npr.org/1001/rss.xml
+- name: Washington Post World
+  source_type: rss
+  enabled: true
+  trusted: true
+  priority: 20
+  language: en
+  country: us
+  category: world
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: private
+  domain: washingtonpost.com
+  source_notes: Washington Post world RSS. Feed is live and includes short descriptions; article pages may present subscription limits for fulltext extraction.
+  notes: RSS summaries persist well; full article extraction may be incomplete on subscriber-only stories.
+  url: https://feeds.washingtonpost.com/rss/world
 - name: PBS NewsHour [API fallback]
   source_type: api
   enabled: false
@@ -316,7 +345,37 @@ sources:
   credibility_score: 0.9
   region: north_america
   ownership_type: publicly_traded
-  notes: RSS feeds return Next.js HTML (not XML) or 403. Effectively unavailable via automated access.
+  notes: Legacy placeholder kept disabled. Direct wsj.com RSS/sitemap endpoints often return anti-bot pages or 403; use the enabled feeds.a.dj.com RSS entries below instead.
+- name: WSJ World
+  source_type: rss
+  enabled: false
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: world
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  domain: wsj.com
+  source_notes: Wall Street Journal world-news RSS via feeds.a.dj.com is structurally accessible and includes brief descriptions/summaries, but direct wsj.com RSS/sitemap endpoints are often blocked or return anti-bot pages.
+  notes: Validation-only feed candidate. Keep disabled until freshness is re-verified; current feed access works but observed items were stale. Use this instead of direct wsj.com automated endpoints if freshness recovers.
+  url: https://feeds.a.dj.com/rss/RSSWorldNews.xml
+- name: WSJ US Business
+  source_type: rss
+  enabled: false
+  trusted: true
+  priority: 10
+  language: en
+  country: us
+  category: business
+  credibility_score: 0.9
+  region: north_america
+  ownership_type: publicly_traded
+  domain: wsj.com
+  source_notes: Wall Street Journal US business RSS via feeds.a.dj.com is structurally accessible and includes brief descriptions/summaries, but direct wsj.com RSS/sitemap endpoints are often blocked or return anti-bot pages.
+  notes: Validation-only feed candidate. Keep disabled until freshness is re-verified; current feed access works but observed items were stale. Use this instead of direct wsj.com automated endpoints if freshness recovers.
+  url: https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml
 - name: Bloomberg
   source_type: rss
   enabled: true
@@ -343,17 +402,20 @@ sources:
   ownership_type: publicly_traded
   notes: All RSS URLs blocked by Akamai + AWS bot protection.
 - name: MarketWatch
-  source_type: api
-  enabled: false
+  source_type: rss
+  enabled: true
   trusted: true
-  priority: 90
+  priority: 20
   language: en
   country: us
   category: business
   credibility_score: 0.8
   region: north_america
   ownership_type: publicly_traded
-  notes: RSS feed infrastructure dead (old URL redirects to 404). Dow Jones bot protection.
+  domain: marketwatch.com
+  source_notes: MarketWatch top stories RSS via Dow Jones feed infrastructure. Feed is live and includes short summaries/descriptions.
+  notes: Upgraded from the old disabled placeholder to a live Dow Jones RSS endpoint. Downstream fulltext extraction can still be limited by MarketWatch/Dow Jones anti-bot or subscriber gating on some article pages.
+  url: https://feeds.content.dowjones.io/public/rss/mw_topstories
 - name: Federal Reserve (Fed)
   source_type: rss
   enabled: true

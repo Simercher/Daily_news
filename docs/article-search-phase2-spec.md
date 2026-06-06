@@ -15,8 +15,10 @@ Phase 2 should preserve the same top-level CLI contract where practical while re
 ## Non-Goals
 Phase 2 should not:
 - redesign duplicate detection itself
-- add semantic/vector search in the same milestone
+- add embedding search / semantic retrieval / RAG-style vector retrieval in the same milestone
 - require SQLite tests to emulate PostgreSQL FTS perfectly
+
+These capabilities are explicitly deferred to the next phase after PostgreSQL FTS lands and stabilizes.
 
 ## Target User Outcomes
 Phase 2 should improve:
@@ -100,14 +102,50 @@ CREATE INDEX ix_articles_search_vector ON articles USING GIN (search_vector);
 - more sensible ranking for partial vs strong field matches
 - less manual score maintenance in Python
 
-### Caution
-The current Phase 1 parser semantics are simplified. Phase 2 must explicitly decide whether to:
-1. preserve that simplified model exactly for compatibility, or
-2. promote the query language to a more faithful boolean model
+### Pre-Implementation Decisions
+Before implementation, Phase 2 is explicitly defined as follows.
 
-Recommendation:
-- preserve existing user-visible behavior first
-- expand semantics only behind tests and explicit docs
+#### 1. Backward compatibility policy
+Phase 2 should be **100% backward compatible at the user-visible query semantics level** for all currently supported Phase 1 query forms:
+- space-separated terms as AND
+- explicit `OR`
+- negation with `-term` / `-"phrase"`
+- quoted phrases
+- existing CLI flags and output shape
+
+This means PostgreSQL FTS may improve ranking and internal execution, but it must not silently change what existing valid Phase 1 queries mean.
+
+#### 2. Authority model: parser vs PostgreSQL function
+The **custom parser remains authoritative**.
+
+Phase 2 should not hand the raw user string directly to PostgreSQL as the source of truth. Instead:
+1. parse query with the existing application parser
+2. produce the normalized internal query structure
+3. compile that normalized structure into PostgreSQL FTS expressions / tsquery
+
+PostgreSQL functions such as `websearch_to_tsquery` may still be used as implementation helpers where appropriate, but they must not override parser-defined semantics.
+
+#### 3. Fallback strategy
+Phase 2 should use a split execution strategy:
+- **PostgreSQL**: primary path uses FTS (`tsvector`, `tsquery`, ranking, GIN index)
+- **SQLite**: fallback path stays on the existing Phase 1 LIKE/CASE engine
+
+The repository/search layer should choose the strategy based on backend capabilities while preserving the same top-level contract.
+
+#### 4. Test split strategy
+Testing should be split by responsibility:
+- **backend-agnostic parser/output tests**: run everywhere
+- **SQLite tests**: validate fallback correctness and stable contract behavior
+- **PostgreSQL integration tests**: validate FTS retrieval, ranking, and backend-specific execution
+
+SQLite is not required to mimic PostgreSQL ranking exactly. It is required to preserve the contract and fallback semantics.
+
+### Rationale
+This combination gives:
+- stable user-facing semantics
+- predictable migration from Phase 1 to Phase 2
+- explicit ownership of query meaning in application code
+- clean backend specialization without breaking tests
 
 ## Output Contract
 Preserve these top-level output fields:
